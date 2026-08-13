@@ -37,6 +37,7 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
 
     display.display().drawCircle(kCenterX, kCenterY, kRadius, SH110X_WHITE);
 
+    //Wind display
     if (data.windConfidence > 0.2f) {
         const float angleRad = (data.windDirection - 90.0f) * 0.0174532925f;
         const int16_t arrowX = kCenterX + static_cast<int16_t>(cosf(angleRad) * (kRadius - 10));
@@ -45,17 +46,18 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
         display.display().fillCircle(arrowX, arrowY, 3, SH110X_WHITE);
     }
 
+    //Variometer display
     display.display().drawRect(kVarioBoxX, kVarioBoxY, kVarioBoxW, kVarioBoxH, SH110X_WHITE);
     const int16_t fillHeight = static_cast<int16_t>(constrain(abs(data.verticalSpeed) * 16.0f, 0.0f, 90.0f));
     if (data.verticalSpeed >= 0.0f) {
-        display.display().fillRect(kVarioBoxX + 2, kVarioBoxY + kVarioBoxH - 2 - fillHeight,
+        display.display().fillRect(kVarioBoxX + 2, ((kVarioBoxY + kVarioBoxH)/2) - 2 - fillHeight,
                                    kVarioBoxW - 4, fillHeight, SH110X_WHITE);
     } else {
-        display.display().fillRect(kVarioBoxX + 2, kVarioBoxY + kVarioBoxH - 2,
+        display.display().fillRect(kVarioBoxX + 2, ((kVarioBoxY + kVarioBoxH)/2) - 2,
                                    kVarioBoxW - 4, fillHeight, SH110X_WHITE);
     }
 
-    display.display().setCursor(0, 104);
+    display.display().setCursor(0, 100);
     display.display().print("Wind:");
     display.display().print(data.windConfidence > 0.2f ? data.windSpeed : 0.0f, 1);
     display.display().print("m/s");

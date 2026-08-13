@@ -143,11 +143,12 @@ void Application::updateSensors() {
             Serial.println("Mock Alt enabled");
         }
 
-        const float currentAltitude = gps_.getAltitude();
-        flightData_.barometricAltitude = currentAltitude;
-        flightData_.relativeAltitude = currentAltitude - mockAltitudeBase;
 
-        if ((now - lastMockAltitudeMs) >= 500) {  // Update derived vario every 500 ms
+        if ((now - lastMockAltitudeMs) >= 500) {  // Update derived vario
+            const float currentAltitude = gps_.getAltitude();
+            flightData_.barometricAltitude = currentAltitude;
+            flightData_.relativeAltitude = currentAltitude - mockAltitudeBase;
+
             const float dt = (now - lastMockAltitudeMs) / 1000.0f;  // Convert milliseconds to seconds
             if (dt > 0.0f) {
                 float derivedVario = (currentAltitude - lastMockAltitude) / dt;
