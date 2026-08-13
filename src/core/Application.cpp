@@ -170,20 +170,32 @@ void Application::updateSensors() {
         flightData_.verticalSpeed = ms5611_.getVerticalSpeed();
     }
 
-    if (flightData_.flightState == FlightState::FLIGHT || flightData_.flightState == FlightState::TAKEOFF_DETECTED) {
+    if ((flightData_.flightState == FlightState::FLIGHT ||
+         flightData_.flightState == FlightState::TAKEOFF_DETECTED) &&
+        now - lastTraceSampleMs_ >= Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS) {
         flightRecorder_.addPoint(flightData_.barometricAltitude,
-                                 static_cast<float>(millis()) / 1000.0f,
+                                 static_cast<float>(now) / 1000.0f,
                                  flightData_.latitude,
                                  flightData_.longitude);
+        lastTraceSampleMs_ = now;
     }
 
     flightData_.tracePointCount = static_cast<uint16_t>(flightRecorder_.size());
-    if (flightRecorder_.size() > 1) {
-        const TracePoint& first = flightRecorder_.at(0);
-        const TracePoint& latest = flightRecorder_.at(flightRecorder_.size() - 1);
-        flightData_.traceAltitudeMin = first.altitude;
-        flightData_.traceAltitudeMax = latest.altitude;
-        flightData_.traceAltitudeSpan = latest.altitude - first.altitude;
+    if (flightRecorder_.size() > 0) {
+        float minAltitude = flightRecorder_.at(0).altitude;
+        float maxAltitude = flightRecorder_.at(0).altitude;
+        for (size_t i = 1; i < flightRecorder_.size(); ++i) {
+            const float altitude = flightRecorder_.at(i).altitude;
+            if (altitude < minAltitude) {
+                minAltitude = altitude;
+            }
+            if (altitude > maxAltitude) {
+                maxAltitude = altitude;
+            }
+        }
+        flightData_.traceAltitudeMin = minAltitude;
+        flightData_.traceAltitudeMax = maxAltitude;
+        flightData_.traceAltitudeSpan = maxAltitude - minAltitude;
     } else {
         flightData_.traceAltitudeMin = flightData_.barometricAltitude;
         flightData_.traceAltitudeMax = flightData_.barometricAltitude;
@@ -229,6 +241,7 @@ void Application::initializeFlightSession() {
     }
 
     flightRecorder_.clear();
+    lastTraceSampleMs_ = millis() - Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS;
     flightStartTimeMs_ = millis();
     flightData_.flightDuration = 0;
     flightData_.distanceFromLZ = 0.0f;

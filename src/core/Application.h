@@ -36,6 +36,7 @@ private:
     uint32_t lastLogicMs_ = 0;
     uint32_t lastAudioMs_ = 0;
     uint32_t lastDisplayMs_ = 0;
+    uint32_t lastTraceSampleMs_ = 0;
     uint32_t flightStartTimeMs_ = 0;
     GPS gps_;
     MS5611Sensor ms5611_;

@@ -19,6 +19,7 @@ constexpr uint8_t MIN_SATELLITES_DEFAULT = 5;
 constexpr uint32_t GPS_UPDATE_INTERVAL_MS = 1000;
 constexpr uint32_t MS5611_UPDATE_INTERVAL_MS = 20;
 constexpr uint32_t DISPLAY_UPDATE_INTERVAL_MS = 100;
+constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 1000;
 constexpr uint32_t BATTERY_UPDATE_INTERVAL_MS = 5000;
 constexpr float BATTERY_DIVIDER_RATIO = 2.0f;
 constexpr float BATTERY_MIN_VOLTAGE = 3.2f;

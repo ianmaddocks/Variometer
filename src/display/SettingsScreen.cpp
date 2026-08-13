@@ -58,6 +58,7 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print(static_cast<int>(data.flightState));
 
     //todo: allow min satellites to be changed in settings
+    //todo: allow Alt Trace sampling to be adjusted and ring buffer size to be changed in settings
 
     if (display.settingsEditMode_) {
         display.display().setCursor(0, 16 + (display.settingsEditIndex_ * Config::LINE_SPACING));
