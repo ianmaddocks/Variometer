@@ -135,23 +135,30 @@ void DisplayManager::updateScreenSelection(const FlightData& data) {
         return;
     }
 
+    const FlightState previousState = currentFlightState_;
     currentFlightState_ = data.flightState;
 
     if (data.flightState == FlightState::FLIGHT || data.flightState == FlightState::TAKEOFF_DETECTED) {
-        const ScreenId expected = ScreenId::Variometer;
-        if (activeScreen_ != expected) {
-            setScreen(expected);
+        const bool enteringFlight = previousState != FlightState::FLIGHT &&
+                                    previousState != FlightState::TAKEOFF_DETECTED;
+        if (enteringFlight) {
+            manualSelectionActive_ = false;
+            setScreen(ScreenId::Variometer);
+        } else if (!manualSelectionActive_ && activeScreen_ != ScreenId::Variometer) {
+            setScreen(ScreenId::Variometer);
         }
-        manualSelectionActive_ = false;
         return;
     }
 
     if (data.flightState == FlightState::POST_FLIGHT || data.flightState == FlightState::LANDING_DETECTED) {
-        const ScreenId expected = ScreenId::Landed;
-        if (activeScreen_ != expected) {
-            setScreen(expected);
+        const bool enteringPostFlight = previousState != FlightState::POST_FLIGHT &&
+                                        previousState != FlightState::LANDING_DETECTED;
+        if (enteringPostFlight) {
+            manualSelectionActive_ = false;
+            setScreen(ScreenId::Landed);
+        } else if (!manualSelectionActive_ && activeScreen_ != ScreenId::Landed) {
+            setScreen(ScreenId::Landed);
         }
-        manualSelectionActive_ = false;
         return;
     }
 

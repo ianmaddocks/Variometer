@@ -31,7 +31,8 @@ private:
 
     FlightData flightData_;
     DeviceSettings settings_;
-    uint32_t lastSensorMs_ = 0;
+    uint32_t lastMs5611Ms_ = 0;
+    uint32_t lastBatteryMs_ = 0;
     uint32_t lastLogicMs_ = 0;
     uint32_t lastAudioMs_ = 0;
     uint32_t lastDisplayMs_ = 0;
@@ -47,6 +48,12 @@ private:
     WindEstimator windEstimator_;
     FlightRecorder flightRecorder_;
     DisplayManager display_;
+
+    bool mockAltitudeInitialized = false;
+    bool lastMockMode = false;
+    float mockAltitudeBase = 0.0f;
+    float lastMockAltitude = 0.0f;
+    uint32_t lastMockAltitudeMs = 0;
 };
 
 }  // namespace variometer

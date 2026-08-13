@@ -28,5 +28,5 @@ constexpr float BATTERY_CRITICAL_VOLTAGE = 3.4f;
 constexpr uint32_t BATTERY_SAMPLES = 8;
 constexpr uint32_t LINE_SPACING = 9;
 constexpr uint32_t ENCODER_I2C_ADDRESS = 0x01;
-constexpr uint32_t ENCODER_LONG_PRESS_THRESHOLD_MS = 2000;
+constexpr uint8_t ENCODER_DOUBLE_PRESS_PERIOD = 50;
 }  // namespace Config

@@ -8,6 +8,7 @@ class FlightDetector {
 public:
     FlightDetector() = default;
     void update(const FlightData& data);
+    void requestTakeoff();
     FlightState getState() const;
 
 private:

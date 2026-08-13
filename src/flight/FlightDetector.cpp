@@ -6,6 +6,8 @@ namespace variometer {
 namespace {
 constexpr uint32_t kTakeoffHoldMs = 2000;
 constexpr uint32_t kLandingHoldMs = 5000;
+constexpr float kTakeoffSpeedMps = 4.0f;
+constexpr float kTakeoffClimbMps = 1.5f;
 }  // namespace
 
 void FlightDetector::update(const FlightData& data) {
@@ -13,7 +15,8 @@ void FlightDetector::update(const FlightData& data) {
 
     switch (state_) {
         case FlightState::PREFLIGHT:
-            if (data.gpsFix && data.satellites >= 4 && (data.groundSpeed > 4.0f || data.verticalSpeed > 1.5f)) {
+            if (data.gpsFix && data.satellites >= 4 && data.groundSpeed > kTakeoffSpeedMps) {//} &&
+            //data.verticalSpeed > kTakeoffClimbMps) {
                 if (!takeoffCandidate_) {
                     takeoffCandidate_ = true;
                     takeoffHoldMs_ = now;
@@ -29,7 +32,7 @@ void FlightDetector::update(const FlightData& data) {
             state_ = FlightState::FLIGHT;
             break;
         case FlightState::FLIGHT:
-            if (data.gpsFix && data.groundSpeed < 1.2f && fabsf(data.verticalSpeed) < 0.3f) {
+            if (data.gpsFix && data.groundSpeed < 1.2f ) {//&& fabsf(data.verticalSpeed) < 0.3f) {
                 if (!landingCandidate_) {
                     landingCandidate_ = true;
                     landingHoldMs_ = now;
@@ -46,6 +49,13 @@ void FlightDetector::update(const FlightData& data) {
             break;
         case FlightState::POST_FLIGHT:
             break;
+    }
+}
+
+void FlightDetector::requestTakeoff() {
+    if (state_ == FlightState::PREFLIGHT) {
+        state_ = FlightState::TAKEOFF_DETECTED;
+        takeoffCandidate_ = false;
     }
 }
 

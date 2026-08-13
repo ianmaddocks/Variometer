@@ -45,25 +45,25 @@ void Application::loop() {
     if (encoder_.wasPressed()) {
         display_.handleButtonPress();
         if (flightData_.flightState == FlightState::PREFLIGHT) {
-            flightData_.flightState = FlightState::TAKEOFF_DETECTED;
-            initializeFlightSession();
+            flightDetector_.requestTakeoff();
         }
     }
 
-    if (display_.isPowerOffScreen() && encoder_.consumeLongPress()) {
+    if (display_.isPowerOffScreen() && encoder_.consumeDoublePress()) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        Serial.println("Power-off sequence initiated by long button press on Power Off screen");
+        Serial.println("Power-off sequence initiated by double button press on Power Off screen");
+    }
+
+    if (encoder_.wasDoublePressed()) {
+        gps_.enableMockFeed();
     }
 
     if (encoder_.getDelta() != 0) {
         display_.handleEncoderDelta(encoder_.getDelta());
     }
 
-    if (now - lastSensorMs_ >= Config::GPS_UPDATE_INTERVAL_MS) {
-        updateSensors();
-        lastSensorMs_ = now;
-    }
+    updateSensors();
 
     if (now - lastLogicMs_ >= 50) {
         updateFlightLogic();
@@ -87,12 +87,16 @@ void Application::loop() {
 
 void Application::updateSensors() {
     gps_.update();
-    ms5611_.update();
-    encoder_.update();
-    batteryMonitor_.update();
+    const uint32_t now = millis();
 
-    if (encoder_.wasDoublePressed()) {
-        gps_.enableMockFeed();
+    if (now - lastMs5611Ms_ >= Config::MS5611_UPDATE_INTERVAL_MS) {
+        ms5611_.update();
+        lastMs5611Ms_ = now;
+    }
+
+    if (now - lastBatteryMs_ >= Config::BATTERY_UPDATE_INTERVAL_MS) {
+        batteryMonitor_.update();
+        lastBatteryMs_ = now;
     }
 
     if (gps_.hasData()) {
@@ -121,35 +125,30 @@ void Application::updateSensors() {
         flightData_.distanceFromLZ = 0.0f;
     }
 
-    static bool mockAltitudeInitialized = false;
-    static bool lastMockMode = false;
-    static float mockAltitudeBase = 0.0f;
-    static float lastMockAltitude = 0.0f;
-    static uint32_t lastMockAltitudeMs = 0;
-
     if (gps_.isMockEnabled() != lastMockMode) {
         lastMockMode = gps_.isMockEnabled();
         mockAltitudeInitialized = false;
         mockAltitudeBase = 0.0f;
         lastMockAltitude = 0.0f;
         lastMockAltitudeMs = 0;
+        Serial.println("Mock Mode enabled");
     }
 
     if (gps_.isMockEnabled()) {
         if (!mockAltitudeInitialized) {
             mockAltitudeBase = gps_.getAltitude();
             lastMockAltitude = gps_.getAltitude();
-            lastMockAltitudeMs = millis();
+            lastMockAltitudeMs = now;
             mockAltitudeInitialized = true;
+            Serial.println("Mock Alt enabled");
         }
 
         const float currentAltitude = gps_.getAltitude();
-        const uint32_t nowMs = millis();
         flightData_.barometricAltitude = currentAltitude;
         flightData_.relativeAltitude = currentAltitude - mockAltitudeBase;
 
-        if (nowMs > lastMockAltitudeMs) {
-            const float dt = (nowMs - lastMockAltitudeMs) / 1000.0f;
+        if ((now - lastMockAltitudeMs) >= 500) {  // Update derived vario every 500 ms
+            const float dt = (now - lastMockAltitudeMs) / 1000.0f;  // Convert milliseconds to seconds
             if (dt > 0.0f) {
                 float derivedVario = (currentAltitude - lastMockAltitude) / dt;
                 if (derivedVario > 5.0f) {
@@ -159,10 +158,11 @@ void Application::updateSensors() {
                 }
                 flightData_.verticalSpeed = derivedVario;
             }
-        }
+            lastMockAltitude = currentAltitude;
+            lastMockAltitudeMs = now;
+     }
 
-        lastMockAltitude = currentAltitude;
-        lastMockAltitudeMs = nowMs;
+       
     } else if (ms5611_.isValid()) {
         flightData_.barometricAltitude = ms5611_.getAltitude();
         flightData_.relativeAltitude = ms5611_.getRelativeAltitude();

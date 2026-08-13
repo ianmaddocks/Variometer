@@ -28,7 +28,7 @@ void PreTakeoffScreen::draw(DisplayManager& display, const FlightData& data) {
 
     int line = 5;
     display.display().setCursor(0, line+=Config::LINE_SPACING);
-    display.display().print("Ready");
+    display.display().print("Waiting for takeoff");
     display.display().setCursor(0, line+=Config::LINE_SPACING);
     display.display().print("Lat:");
     display.display().print(data.latitude, 4);

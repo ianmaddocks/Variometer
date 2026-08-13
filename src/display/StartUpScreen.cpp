@@ -27,7 +27,7 @@ void StartUpScreen::draw(DisplayManager& display, const FlightData& data) {
 
     int line = 5;
     display.display().setCursor(0, line += Config::LINE_SPACING);
-    display.display().print("Variometer");
+    display.display().print("Variometer - startup");
     display.display().setCursor(0, line += Config::LINE_SPACING);
     display.display().print("v0.1.0");
     display.display().setCursor(0, line += Config::LINE_SPACING);
@@ -40,8 +40,6 @@ void StartUpScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().setCursor(0, line += Config::LINE_SPACING);
     display.display().print(data.gpsFix ? "GPS ready" : "Waiting for GPS");
     display.display().setCursor(0, line += Config::LINE_SPACING);
-    display.display().print("Need sats >=");
-    display.display().print(Config::MIN_SATELLITES_DEFAULT);
 
     /*
     const int16_t barX = 8;
