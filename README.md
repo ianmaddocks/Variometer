@@ -1,7 +1,5 @@
 # Variometer
 ## Version 0.0.1
-# Variometer
-## Version 0.0.1
 
 ## Overview
 This is my Variometer project for a PPG Paramamotor.

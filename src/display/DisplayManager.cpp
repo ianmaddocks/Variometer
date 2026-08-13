@@ -192,7 +192,7 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         const TracePoint& first = recorder_->at(0);
         const TracePoint& latest = recorder_->at(count - 1);
         const float span = latest.altitude - first.altitude;
-        Serial.printf("Trace points=%u span=%.1f\n", static_cast<unsigned>(count), span);
+        //Serial.printf("Trace points=%u span=%.1f\n", static_cast<unsigned>(count), span);
     }
 
     switch (activeScreen_) {
