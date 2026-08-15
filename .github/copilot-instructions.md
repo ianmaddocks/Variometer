@@ -28,8 +28,8 @@ These pin assignments are fixed and must not be changed without explicit instruc
 
 | Function        | Pin |
 | --------------- | --- |
-| I2C SDA         | D10 |
-| I2C SCL         | D9  |
+| I2C SDA         | D9  |
+| I2C SCL         | D10 |
 | GPS RX          | D8  |
 | GPS TX          | D7  |
 | Battery voltage | A1  |
@@ -748,8 +748,8 @@ Example:
 
 namespace Config
 {
-    constexpr int I2C_SDA = D10;
-    constexpr int I2C_SCL = D9;
+    constexpr int I2C_SDA = D9;
+    constexpr int I2C_SCL = D10;
 
     constexpr int GPS_RX = D8;
     constexpr int GPS_TX = D7;

@@ -16,7 +16,7 @@ String lastWindStatus;
 
 void WindDirectionScreen::enter() {
     lastWindStatus = "";
-    Serial.println("Entering wind direction screen");
+    DBGLN("Entering wind direction screen");
 }
 
 void WindDirectionScreen::update(const FlightData& data) {
@@ -28,12 +28,13 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
                     String(static_cast<int>(data.windDirection)) + "deg";
     if (status != lastWindStatus) {
         lastWindStatus = status;
-        Serial.println(status);
+        DBGLN(status);
     }
 
-    int line = 5;
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    int line = 1;
+    display.display().setCursor(0, line);
     display.display().print("Wind");
+    line+=18;
 
     display.display().drawCircle(kCenterX, kCenterY, kRadius, SH110X_WHITE);
 

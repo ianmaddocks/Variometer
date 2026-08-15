@@ -52,7 +52,7 @@ void Application::loop() {
     if (display_.isPowerOffScreen() && encoder_.consumeDoublePress()) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        Serial.println("Power-off sequence initiated by double button press on Power Off screen");
+        DBGLN("Power-off sequence initiated by double button press on Power Off screen");
     }
 
     if (encoder_.wasDoublePressed()) {
@@ -81,14 +81,17 @@ void Application::loop() {
     }
 
     if (powerManager_.shouldPowerOff()) {
-        Serial.println("Power-off requested");
+        DBGLN("Power-off requested");
     }
 }
 
 void Application::updateSensors() {
-    gps_.update();
     const uint32_t now = millis();
-
+    if (now - lastMsGps_ >= Config::MS5611_UPDATE_INTERVAL_GPS) {
+        gps_.update();
+        lastMsGps_ = now;
+    }
+    
     if (now - lastMs5611Ms_ >= Config::MS5611_UPDATE_INTERVAL_MS) {
         ms5611_.update();
         lastMs5611Ms_ = now;
@@ -131,7 +134,7 @@ void Application::updateSensors() {
         mockAltitudeBase = 0.0f;
         lastMockAltitude = 0.0f;
         lastMockAltitudeMs = 0;
-        Serial.println("Mock Mode enabled");
+        DBGLN("Mock Mode enabled");
     }
 
     if (gps_.isMockEnabled()) {
@@ -140,7 +143,7 @@ void Application::updateSensors() {
             lastMockAltitude = gps_.getAltitude();
             lastMockAltitudeMs = now;
             mockAltitudeInitialized = true;
-            Serial.println("Mock Alt enabled");
+            DBGLN("Mock Alt enabled");
         }
 
 
@@ -247,9 +250,9 @@ void Application::initializeFlightSession() {
     flightData_.distanceFromLZ = 0.0f;
     flightData_.tracePointCount = 0;
 
-    Serial.printf("Flight session initialized at %.5f, %.5f\n",
-                  flightData_.lzLatitude,
-                  flightData_.lzLongitude);
+    DBGF("Flight session initialized at %.5f, %.5f\n",
+         flightData_.lzLatitude,
+         flightData_.lzLongitude);
 }
 
 float Application::calculateDistanceFromLz(float latitude, float longitude) const {

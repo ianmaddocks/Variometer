@@ -40,21 +40,24 @@ void drawBatteryIcon(SimpleDisplay& display, float percent, int16_t x, int16_t y
 }
 
 void drawSignalBars(SimpleDisplay& display, uint8_t satellites, int16_t x, int16_t y) {
-    const uint8_t bars = (satellites > 4) ? 4 : satellites;
-    for (uint8_t i = 0; i < 4; ++i) {
-        const int16_t barHeight = 2 + i * 2;
+    const uint8_t bars = (satellites > Config::MIN_SATELLITES_DEFAULT) ? Config::MIN_SATELLITES_DEFAULT : max(satellites, static_cast<uint8_t>(1));
+    for (uint8_t i = 0; i < Config::MIN_SATELLITES_DEFAULT; ++i) {
+        const int16_t barHeight = 2 + (i * 6) / (Config::MIN_SATELLITES_DEFAULT - 1); // the first bar is always 2, the last bar reaches 8, intermediate bars scale smoothly between them, the growth is proportional to the bar’s position within the threshold
         const int16_t barY = y - barHeight + 2;
         const int16_t barX = x + i * 3;
         const int16_t barWidth = 2;
         if (i < bars) {
-            display.fillRect(barX, barY, barWidth, barHeight, SH110X_WHITE);
-        } else {
             display.drawRect(barX, barY, barWidth, barHeight, SH110X_WHITE);
         }
     }
 }
 
 void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data) {
+    drawSignalBars(display, data.satellites, 106-(Config::MIN_SATELLITES_DEFAULT*3), kStatusY-6);
+    drawBatteryIcon(display, data.batteryPercent, 108, kStatusY-12);
+    display.drawLine(0, 11, 128, 11, SH110X_WHITE);
+#ifdef DEBUG
+    display.drawLine(0, 128-18, 128, 128-18, SH110X_WHITE);
     display.setTextSize(1);
     display.setCursor(0, 128-15);
     display.print("F:");
@@ -69,13 +72,10 @@ void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data) {
     display.print(static_cast<int>(data.barometricAltitude));
     display.print(" V:");
     display.print(data.verticalSpeed, 1);
-    display.setCursor(95, kStatusY);
-    drawBatteryIcon(display, data.batteryPercent, 108, kStatusY-12);
-    drawSignalBars(display, data.satellites, 94, kStatusY-6);
-    display.drawLine(0, 11, 128, 11, SH110X_WHITE);
-    display.drawLine(0, 128-18, 128, 128-18, SH110X_WHITE);
-    //display.drawRect(0, 11, 128, 128-18-9, SH110X_WHITE);
+    //display.setCursor(95, kStatusY);
+#endif
 }
+
 }  // namespace
 
 DisplayManager::DisplayManager()
@@ -100,7 +100,7 @@ void DisplayManager::begin() {
     display_.begin();
     initialized_ = true;
     startupScreen_->enter();
-    Serial.println("Display initialized");
+    DBGLN("Display initialized");
 }
 
 void DisplayManager::setScreen(ScreenId screen) {
@@ -182,7 +182,7 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
 
     if (activeScreen_ != lastScreen_) {
         lastScreen_ = activeScreen_;
-        Serial.printf("Screen transition -> %d\n", static_cast<int>(activeScreen_));
+        DBGF("Screen transition -> %d\n", static_cast<int>(activeScreen_));
     }
 
     display_.clear();
@@ -231,7 +231,7 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
         return;
     }
 
-    Serial.printf("DisplayManager: encoder delta=%d currentScreen=%d\n", delta, static_cast<int>(activeScreen_));
+    DBGF("DisplayManager: encoder delta=%d currentScreen=%d\n", delta, static_cast<int>(activeScreen_));
 
     if (activeScreen_ == ScreenId::Settings) {
         if (settingsEditMode_) {
@@ -248,8 +248,8 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
             } else {
                 backgroundWhite_ = !backgroundWhite_;
             }
-            Serial.printf("Settings edit item=%u value=%u\n", static_cast<unsigned>(settingsEditIndex_),
-                          static_cast<unsigned>(settingsEditIndex_ == 0 ? minSatellitesSetting_ : (audioEnabled_ ? 1 : 0)));
+            DBGF("Settings edit item=%u value=%u\n", static_cast<unsigned>(settingsEditIndex_),
+                 static_cast<unsigned>(settingsEditIndex_ == 0 ? minSatellitesSetting_ : (audioEnabled_ ? 1 : 0)));
             return;
         }
     }
@@ -292,7 +292,7 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     }
 
     setScreen(nextScreen);
-    Serial.printf("Screen changed via encoder to %d\n", static_cast<int>(nextScreen));
+    DBGF("Screen changed via encoder to %d\n", static_cast<int>(nextScreen));
 }
 
 void DisplayManager::handleButtonPress() {
@@ -306,23 +306,23 @@ void DisplayManager::handleButtonPress() {
     }
 
     if (activeScreen_ == ScreenId::PowerOff) {
-        Serial.println("Power-off screen active: long press required to shutdown");
+        DBGLN("Power-off screen active: long press required to shutdown");
         return;
     }
 
-    Serial.println("Button press acknowledged by display manager");
+    DBGLN("Button press acknowledged by display manager");
 }
 
 void DisplayManager::enterSettingsEditMode() {
     settingsEditMode_ = true;
     settingsEditIndex_ = 0;
-    Serial.println("Settings edit mode enabled");
+    DBGLN("Settings edit mode enabled");
 }
 
 void DisplayManager::exitSettingsEditMode() {
     settingsEditMode_ = false;
     settingsEditIndex_ = 0;
-    Serial.println("Settings edit mode disabled");
+    DBGLN("Settings edit mode disabled");
 }
 
 void DisplayManager::setPowerManager(PowerManager* powerManager) {
@@ -341,13 +341,13 @@ void DisplayManager::update(const FlightData& data) {
     drawCurrentScreen(data);
 
     if (now - lastLogMs >= kLogIntervalMs) {
-        Serial.printf("State=%s screen=%d sats=%u speed=%.1fkm/h vario=%.2fm/s batt=%.0f%%\n",
-                      stateName(data.flightState),
-                      static_cast<int>(activeScreen_),
-                      static_cast<unsigned>(data.satellites),
-                      data.groundSpeed * 3.6f,
-                      data.verticalSpeed,
-                      data.batteryPercent);
+        DBGF("State=%s screen=%d sats=%u speed=%.1fkm/h vario=%.2fm/s batt=%.0f%%\n",
+             stateName(data.flightState),
+             static_cast<int>(activeScreen_),
+             static_cast<unsigned>(data.satellites),
+             data.groundSpeed * 3.6f,
+             data.verticalSpeed,
+             data.batteryPercent);
         lastLogMs = now;
     }
 }

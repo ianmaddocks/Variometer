@@ -60,7 +60,7 @@ void GPS::enableMockFeed() {
     altitude_ = mockBaseAltitude_;
     groundSpeed_ = 0.0f;
     track_ = 0.0f;
-    Serial.println("Mock GPS feed enabled");
+    DBGLN("Mock GPS feed enabled");
 }
 
 bool GPS::isMockEnabled() const { return mockEnabled_; }
@@ -70,7 +70,7 @@ void GPS::feedMockSentence(const String& sentence) {
 }
 
 void GPS::feedSerialSentence(const String& sentence) {
-    if (sentence.startsWith("$GPGGA")) {
+    if (sentence.startsWith("$GPGGA") || sentence.startsWith("$GNGGA")) {
         String fields[15];
         for (int i = 0; i < 15; ++i) {
             fields[i] = "";
@@ -100,7 +100,7 @@ void GPS::feedSerialSentence(const String& sentence) {
             }
             hasData_ = true;
         }
-    } else if (sentence.startsWith("$GPRMC")) {
+    } else if (sentence.startsWith("$GPRMC") || sentence.startsWith("$GNRMC")) {
         String fields[13];
         for (int i = 0; i < 13; ++i) {
             fields[i] = "";
@@ -159,7 +159,7 @@ void GPS::update() {
             buffer[index] = '\0';
             if (index > 0) {
                 const String sentence(buffer);
-                //Serial.println(sentence);
+                Serial.println(sentence);
                 feedSerialSentence(sentence);
             }
             index = 0;

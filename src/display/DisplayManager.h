@@ -4,6 +4,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
+#include "config/Config.h"
 #include "core/FlightData.h"
 #include "display/Screen.h"
 #include "flight/FlightRecorder.h"
@@ -55,6 +56,10 @@ public:
         display_.setTextSize(size);
     }
 
+    void setTextColor(uint16_t color) {
+        display_.setTextColor(color);
+    }
+
     void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
         display_.drawRect(x, y, w, h, color);
     }
@@ -65,6 +70,10 @@ public:
 
     void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
         display_.drawLine(x0, y0, x1, y1, color);
+    }
+
+    void drawPixel(int16_t x, int16_t y, uint16_t color) {
+        display_.drawPixel(x, y, color);
     }
 
     void drawCircle(int16_t x, int16_t y, int16_t r, uint16_t color) {

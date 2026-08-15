@@ -2,6 +2,19 @@
 
 #include <Arduino.h>
 
+#define VARIOMETER_VERSION "v0.0.1"
+
+
+#if defined(DEBUG) || !defined(NDEBUG)
+  #define DBG(...) do { Serial.print(__VA_ARGS__); } while (0)
+  #define DBGLN(...) do { Serial.println(__VA_ARGS__); } while (0)
+  #define DBGF(...) do { Serial.printf(__VA_ARGS__); } while (0)
+#else
+  #define DBG(...) do { } while (0)
+  #define DBGLN(...) do { } while (0)
+  #define DBGF(...) do { } while (0)
+#endif
+
 namespace Config {
 constexpr int I2C_SDA = D9;
 constexpr int I2C_SCL = D10;
@@ -18,6 +31,7 @@ constexpr float VARIO_MAX_SINK = -5.0f;
 constexpr uint8_t MIN_SATELLITES_DEFAULT = 5;
 constexpr uint32_t GPS_UPDATE_INTERVAL_MS = 1000;
 constexpr uint32_t MS5611_UPDATE_INTERVAL_MS = 20;
+constexpr uint32_t MS5611_UPDATE_INTERVAL_GPS = 1000;
 constexpr uint32_t DISPLAY_UPDATE_INTERVAL_MS = 100;
 constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 1000;
 constexpr uint32_t BATTERY_UPDATE_INTERVAL_MS = 5000;

@@ -11,7 +11,7 @@ namespace {
 
 void VarioScreen::enter() {
     lastVarioStatus = "";
-    Serial.println("Entering variometer screen");
+    DBGLN("Entering variometer screen");
 }
 
 void VarioScreen::update(const FlightData& data) {
@@ -23,39 +23,39 @@ void VarioScreen::draw(DisplayManager& display, const FlightData& data) {
                     String(data.verticalSpeed, 2) + "m/s " + String(data.barometricAltitude, 1) + "m";
     if (status != lastVarioStatus) {
         lastVarioStatus = status;
-        Serial.println(status);
+        DBGLN(status);
     }
 
-    int line = 5;
-    display.display().setCursor(0, line += Config::LINE_SPACING);
+    int line = 3;
+    display.display().setCursor(0, 1);
     display.display().print("Vario");
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Alt:");
     display.display().print(data.barometricAltitude, 1);
     display.display().print("m");
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Spd:");
     display.display().print(data.groundSpeed * 3.6f, 1);
     display.display().print("km/h");
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Vario:");
     display.display().print(data.verticalSpeed, 2);
     display.display().print("m/s");
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("LZ:");
     display.display().print(data.distanceFromLZ, 1);
     display.display().print("km");
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Batt:");
     display.display().print(static_cast<int>(data.batteryPercent));
     display.display().print("%");
     if (data.batteryPercent <= 20.0f) {
         display.display().print(" LOW");
     }
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Sats:");
     display.display().print(static_cast<int>(data.satellites));
-    display.display().setCursor(0, line+=Config::LINE_SPACING);
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("State:");
     display.display().print(static_cast<int>(data.flightState));
 }

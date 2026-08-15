@@ -33,11 +33,11 @@ void Encoder::update() {
         if (encoder_->readStatus(i2cEncoderLibV2::PUSHP)) wasPressed_ = true;
         if (encoder_->readStatus(i2cEncoderLibV2::PUSHD)) wasDoublePressed_ = true;
 
-        Serial.print("Encoder status: ");
-        if (delta_ != 0) Serial.print("Delta: " + String(delta_) + " ");
-        if (wasPressed_) Serial.print("Pressed ");
-        if (wasDoublePressed_) Serial.print("Double Pressed ");
-        Serial.println();
+        DBG("Encoder status: ");
+        if (delta_ != 0) DBG("Delta: " + String(delta_) + " ");
+        if (wasPressed_) DBG("Pressed ");
+        if (wasDoublePressed_) DBG("Double Pressed ");
+        DBGLN("");
     }
 }
 

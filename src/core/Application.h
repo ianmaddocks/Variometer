@@ -31,6 +31,7 @@ private:
 
     FlightData flightData_;
     DeviceSettings settings_;
+    uint32_t lastMsGps_ = 0;
     uint32_t lastMs5611Ms_ = 0;
     uint32_t lastBatteryMs_ = 0;
     uint32_t lastLogicMs_ = 0;
@@ -58,3 +59,4 @@ private:
 };
 
 }  // namespace variometer
+
