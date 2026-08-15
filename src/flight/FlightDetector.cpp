@@ -15,6 +15,7 @@ void FlightDetector::update(const FlightData& data) {
 
     switch (state_) {
         case FlightState::PREFLIGHT:
+        case FlightState::POST_FLIGHT:
             if (data.gpsFix && data.satellites >= 4 && data.groundSpeed > kTakeoffSpeedMps) {//} &&
             //data.verticalSpeed > kTakeoffClimbMps) {
                 if (!takeoffCandidate_) {
@@ -46,8 +47,6 @@ void FlightDetector::update(const FlightData& data) {
             break;
         case FlightState::LANDING_DETECTED:
             state_ = FlightState::POST_FLIGHT;
-            break;
-        case FlightState::POST_FLIGHT:
             break;
     }
 }

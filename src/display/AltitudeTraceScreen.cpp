@@ -49,8 +49,8 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
     }
 
     // Plot bounds are kept inset from the screen edge so the trace has a small margin.
-    const int16_t plotLeft = kPlotX + 2;
-    const int16_t plotRight = kPlotX + kPlotW - 2;
+    const int16_t plotLeft = kPlotX + 0;
+    const int16_t plotRight = kPlotX + kPlotW - 0;
     const int16_t plotTop = kPlotY + 2;
     const int16_t plotBottom = kPlotY + kPlotH - 2;
     const int16_t plotHeight = plotBottom - plotTop;
@@ -107,8 +107,8 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
     char maxLabel[16];
     snprintf(minLabel, sizeof(minLabel), "%.0fm", minAlt);
     snprintf(maxLabel, sizeof(maxLabel), "%.0fm", maxAlt);
-    display.display().fillRect(47, minY - 6, strlen(maxLabel)*7, 13, SH110X_WHITE);
-    display.display().fillRect(47, maxY - 6, strlen(minLabel)*7, 13, SH110X_WHITE);
+    display.display().fillRect(47, minY - 6, strlen(maxLabel)*7.5, 13, SH110X_WHITE);
+    display.display().fillRect(47, maxY - 6, strlen(minLabel)*7.5, 13, SH110X_WHITE);
     display.display().setTextColor(SH110X_BLACK);
     display.display().setCursor(50, maxY - 3);
     display.display().print(minLabel);

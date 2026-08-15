@@ -44,6 +44,7 @@ void GPS::begin() {
     track_ = 0.0f;
     satellites_ = 0;
     fix_ = false;
+    utcDateTime_ = DateTime{};
     mockEnabled_ = false;
     mockStartMs_ = 0;
 }
@@ -118,6 +119,23 @@ void GPS::feedSerialSentence(const String& sentence) {
         }
 
         if (fieldIndex > 7 && fields[2] == "A") {
+            if (fields[1].length() >= 6 && fields[9].length() >= 6) {
+                const int timeValue = fields[1].toInt();
+                const int dateValue = fields[9].toInt();
+                const uint8_t day = static_cast<uint8_t>(dateValue / 10000);
+                const uint8_t month = static_cast<uint8_t>((dateValue / 100) % 100);
+                const uint8_t year = static_cast<uint8_t>(dateValue % 100);
+                if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+                    utcDateTime_.hour = static_cast<uint8_t>(timeValue / 10000);
+                    utcDateTime_.minute = static_cast<uint8_t>((timeValue / 100) % 100);
+                    utcDateTime_.second = static_cast<uint8_t>(timeValue % 100);
+                    utcDateTime_.day = day;
+                    utcDateTime_.month = month;
+                    utcDateTime_.year = static_cast<uint16_t>(2000 + year);
+                    utcDateTime_.valid = utcDateTime_.hour < 24 && utcDateTime_.minute < 60 &&
+                                         utcDateTime_.second < 60;
+                }
+            }
             const float lat = parseCoordinate(fields[3], fields[4]);
             const float lon = parseCoordinate(fields[5], fields[6]);
             const float speed = fields[7].toFloat() * 0.514444f;
@@ -159,7 +177,7 @@ void GPS::update() {
             buffer[index] = '\0';
             if (index > 0) {
                 const String sentence(buffer);
-                Serial.println(sentence);
+                //Serial.println(sentence);
                 feedSerialSentence(sentence);
             }
             index = 0;
@@ -177,5 +195,6 @@ float GPS::getGroundSpeed() const { return groundSpeed_; }
 float GPS::getTrack() const { return track_; }
 uint8_t GPS::getSatellites() const { return satellites_; }
 bool GPS::getFixStatus() const { return fix_; }
+GPS::DateTime GPS::getUtcDateTime() const { return utcDateTime_; }
 
 }  // namespace variometer

@@ -10,6 +10,8 @@ public:
     void begin();
     void update();
     bool isValid() const;
+    float getPressure() const;
+    float getTemperature() const;
     float getAltitude() const;
     float getRelativeAltitude() const;
     float getVerticalSpeed() const;
@@ -26,6 +28,8 @@ private:
     bool readProm();
 
     bool valid_ = false;
+    float pressure_ = 0.0f;
+    float temperature_ = 0.0f;
     float altitude_ = 0.0f;
     float relativeAltitude_ = 0.0f;
     float verticalSpeed_ = 0.0f;
@@ -37,6 +41,8 @@ private:
     float baseAltitude_ = 0.0f;
     float previousAltitude_ = 0.0f;
     uint32_t previousAltitudeMs_ = 0;
+    uint32_t lastDebugMs_ = 0;
+    uint8_t address_ = 0x76;
 };
 
 }  // namespace variometer

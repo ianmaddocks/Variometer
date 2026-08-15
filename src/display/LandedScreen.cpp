@@ -16,7 +16,7 @@ void LandedScreen::update(const FlightData& data) {
 
 void LandedScreen::draw(DisplayManager& display, const FlightData& data) {
 
-     int line = 3;
+    int line = 3;
     display.display().setCursor(0, 1);
     display.display().print("Landed");
     display.display().setCursor(0, line++ *Config::LINE_SPACING);
@@ -38,8 +38,6 @@ void LandedScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Sats:");
     display.display().print(static_cast<int>(data.satellites));
-    display.display().setCursor(0, line++ * Config::LINE_SPACING);
-    display.display().print("Press to reset");
 }
 
 void LandedScreen::exit() {}

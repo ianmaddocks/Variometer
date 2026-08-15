@@ -6,6 +6,16 @@ namespace variometer {
 
 class GPS {
 public:
+    struct DateTime {
+        uint16_t year = 0;
+        uint8_t month = 0;
+        uint8_t day = 0;
+        uint8_t hour = 0;
+        uint8_t minute = 0;
+        uint8_t second = 0;
+        bool valid = false;
+    };
+
     GPS() = default;
     void begin();
     void update();
@@ -19,6 +29,7 @@ public:
     float getTrack() const;
     uint8_t getSatellites() const;
     bool getFixStatus() const;
+    DateTime getUtcDateTime() const;
 
 private:
     void feedMockSentence(const String& sentence);
@@ -32,6 +43,7 @@ private:
     float track_ = 0.0f;
     uint8_t satellites_ = 0;
     bool fix_ = false;
+    DateTime utcDateTime_;
     bool mockEnabled_ = false;
     uint32_t mockStartMs_ = 0;
     uint32_t mockSentenceIndex_ = 0;

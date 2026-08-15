@@ -29,6 +29,9 @@ void Application::begin() {
     batteryMonitor_.begin();
     powerManager_.begin();
     buzzer_.begin();
+#ifdef NDEBUG
+    flightLogStorage_.begin();
+#endif
     display_.begin();
     display_.setPowerManager(&powerManager_);
     display_.setRecorder(&flightRecorder_);
@@ -39,6 +42,10 @@ void Application::begin() {
 
 void Application::loop() {
     const uint32_t now = millis();
+
+#ifdef NDEBUG
+    flightLogStorage_.update();
+#endif
 
     encoder_.update();
 
@@ -180,6 +187,7 @@ void Application::updateSensors() {
                                  static_cast<float>(now) / 1000.0f,
                                  flightData_.latitude,
                                  flightData_.longitude);
+        flightLogStorage_.appendPoint(flightRecorder_.at(flightRecorder_.size() - 1));
         lastTraceSampleMs_ = now;
     }
 
@@ -214,9 +222,13 @@ void Application::updateFlightLogic() {
     const FlightState previousState = flightData_.flightState;
     flightDetector_.update(flightData_);
     const FlightState detectorState = flightDetector_.getState();
-    if (previousState == FlightState::PREFLIGHT && detectorState != FlightState::PREFLIGHT) {
+    if ((previousState == FlightState::PREFLIGHT || previousState == FlightState::POST_FLIGHT) &&
+        detectorState == FlightState::TAKEOFF_DETECTED) {
         initializeFlightSession();
         buzzer_.playTakeoffTone();
+    }
+    if (previousState != FlightState::POST_FLIGHT && detectorState == FlightState::POST_FLIGHT) {
+        flightLogStorage_.finishFlight(flightData_.flightDuration);
     }
     flightData_.flightState = detectorState;
     varioCalculator_.update(flightData_);
@@ -233,10 +245,6 @@ void Application::updateAudio() {
 }
 
 void Application::initializeFlightSession() {
-    if (flightData_.hasLz) {
-        return;
-    }
-
     if (flightData_.gpsFix) {
         flightData_.lzLatitude = flightData_.latitude;
         flightData_.lzLongitude = flightData_.longitude;
@@ -244,6 +252,9 @@ void Application::initializeFlightSession() {
     }
 
     flightRecorder_.clear();
+    if (!flightLogStorage_.startFlight(gps_.getUtcDateTime())) {
+        DBGLN("Unable to start persistent flight log");
+    }
     lastTraceSampleMs_ = millis() - Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS;
     flightStartTimeMs_ = millis();
     flightData_.flightDuration = 0;

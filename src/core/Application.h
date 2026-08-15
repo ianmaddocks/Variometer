@@ -11,6 +11,7 @@
 #include "flight/VarioCalculator.h"
 #include "flight/WindEstimator.h"
 #include "flight/FlightRecorder.h"
+#include "flight/FlightLogStorage.h"
 #include "display/DisplayManager.h"
 
 namespace variometer {
@@ -49,6 +50,7 @@ private:
     VarioCalculator varioCalculator_;
     WindEstimator windEstimator_;
     FlightRecorder flightRecorder_;
+    FlightLogStorage flightLogStorage_;
     DisplayManager display_;
 
     bool mockAltitudeInitialized = false;
