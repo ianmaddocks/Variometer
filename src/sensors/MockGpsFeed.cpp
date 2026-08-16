@@ -3,6 +3,9 @@
 namespace variometer {
 namespace mockgps {
 
+//todo: don't allow allow mock to run on settings or power off screen, where the double press means somethig else
+
+
 const char* const kSentenceFeed[] = {
     // GPS lock
     "$GPGGA,120000.000,5120.0000,N,00000.0000,W,1,06,1.0,100.0,M,,M,,*48",

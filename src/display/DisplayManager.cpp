@@ -260,7 +260,7 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     ScreenId nextScreen = activeScreen_;
 
     if (currentFlightState_ == FlightState::PREFLIGHT) {
-        static const ScreenId preflightOrder[] = {ScreenId::PreTakeoff, ScreenId::Settings, ScreenId::PowerOff};
+        static const ScreenId preflightOrder[] = {ScreenId::StartUp, ScreenId::Settings, ScreenId::PowerOff};
         constexpr int count = 3;
         for (int i = 0; i < count; ++i) {
             if (preflightOrder[i] == activeScreen_) {

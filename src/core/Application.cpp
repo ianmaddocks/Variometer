@@ -58,13 +58,13 @@ void Application::loop() {
         }
     }
 
-    if (display_.isPowerOffScreen() && encoder_.consumeLongPress()) {
+    if (display_.isPowerOffScreen() && encoder_.consumeDoublePress()) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        DBGLN("Power-off sequence initiated by press-and-hold on Power Off screen");
+        DBGLN("Power-off sequence initiated by long button press on Power Off screen");
     }
 
-#if defined(DEBUG) || !defined(NDEBUG)
+#ifdef DEBUG
     // Debug/test-only: double-press anywhere swaps in a scripted GPS feed.
     // Deliberately excluded from release builds so it can't be triggered
     // by an accidental double-press in flight.
@@ -94,7 +94,9 @@ void Application::loop() {
         lastDisplayMs_ = now;
     }
 
-    powerManager_.update();
+    if (powerManager_.shouldPowerOff()) {
+        DBGLN("Power-off requested");
+    }
 }
 
 void Application::updateSensors() {

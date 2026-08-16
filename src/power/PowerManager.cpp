@@ -12,7 +12,7 @@ bool PowerManager::shouldPowerOff() const { return powerOffRequested_; }
 
 void PowerManager::requestPowerOff() {
     if (!powerOffRequested_) {
-        powerOffRequested_ = true;
+    powerOffRequested_ = true;
         requestedAtMs_ = millis();
     }
 }

@@ -85,11 +85,15 @@ bool MS5611Sensor::readProm() {
         Wire.beginTransmission(address_);
         Wire.write(address);
 
-        if (Wire.endTransmission() != 0) {
+        const uint8_t error = Wire.endTransmission();
+        if (error != 0) {
+            DBGF("MS5611: PROM register 0x%02X select I2C error %u\n", address, error);
             return false;
         }
 
-        if (Wire.requestFrom(address_, static_cast<uint8_t>(2)) != 2) {
+        const uint8_t received = Wire.requestFrom(address_, static_cast<uint8_t>(2));
+        if (received != 2) {
+            DBGF("MS5611: PROM register 0x%02X request got %u bytes, expected 2\n", address, received);
             return false;
         }
 
@@ -111,6 +115,10 @@ bool MS5611Sensor::readProm() {
             allZero = false;
             break;
         }
+    }
+
+    if (allZero) {
+        DBGLN("MS5611: PROM coefficients all zero, treating as unprogrammed/absent device");
     }
 
     return !allZero;
@@ -157,12 +165,14 @@ void MS5611Sensor::begin() {
     Wire.beginTransmission(address_);
     Wire.write(kResetCommand);
 
-    if (Wire.endTransmission() != 0) {
-        DBGLN("MS5611: reset command failed");
+    const uint8_t resetError = Wire.endTransmission();
+    if (resetError != 0) {
+        DBGF("MS5611: reset command failed, I2C error %u\n", resetError);
         return;
     }
 
-    delay(3);
+    // Datasheet specifies ~2.8ms reset time; use a safety margin.
+    delay(10);
 
     // Read C1..C6.
     if (!readProm()) {
@@ -345,11 +355,12 @@ void MS5611Sensor::processMeasurements() {
 
 
     // Pressure in 0.01 mbar / hPa.
+    // Per datasheet: P = (D1*SENS/2^21 - OFF) / 2^15 -- the final >>15
+    // applies to the whole expression, not just OFF.
     const int64_t P =
         (
-            (static_cast<int64_t>(pressureRaw_) * SENS)
-            >> 21
-        ) - (OFF >> 15);
+            ((static_cast<int64_t>(pressureRaw_) * SENS) >> 21) - OFF
+        ) >> 15;
 
     /*
      * P is in 0.01 mbar.

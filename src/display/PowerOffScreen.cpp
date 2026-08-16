@@ -27,7 +27,7 @@ void PowerOffScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().setCursor(0, 1);
     display.display().print("Power Off");
     display.display().setCursor(0, line++ *Config::LINE_SPACING);
-    display.display().print("Hold to power off");
+    display.display().print("2x press to power off");
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Batt:");
     display.display().print(static_cast<int>(data.batteryPercent));

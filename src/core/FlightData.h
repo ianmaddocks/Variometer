@@ -16,7 +16,7 @@ enum class FlightState : uint8_t {
 
 struct DeviceSettings {
     uint8_t minSatellites = Config::MIN_SATELLITES_DEFAULT;
-    bool audioVarioEnabled = true;
+    bool audioVarioEnabled = false;
     bool hepaticVarioEnabled = true;
     bool backgroundWhite = false;
     uint16_t altitudeTraceMinutes = 30;
