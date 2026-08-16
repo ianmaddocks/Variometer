@@ -37,6 +37,8 @@ void Application::begin() {
     display_.setRecorder(&flightRecorder_);
     settings_.minSatellites = Config::MIN_SATELLITES_DEFAULT;
 
+    // Buzzer defaults to disabled inside the driver; without this it never sounds.
+    buzzer_.setEnabled(settings_.audioVarioEnabled);
     buzzer_.playStartupTune();
 }
 
@@ -56,15 +58,20 @@ void Application::loop() {
         }
     }
 
-    if (display_.isPowerOffScreen() && encoder_.consumeDoublePress()) {
+    if (display_.isPowerOffScreen() && encoder_.consumeLongPress()) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        DBGLN("Power-off sequence initiated by double button press on Power Off screen");
+        DBGLN("Power-off sequence initiated by press-and-hold on Power Off screen");
     }
 
+#if defined(DEBUG) || !defined(NDEBUG)
+    // Debug/test-only: double-press anywhere swaps in a scripted GPS feed.
+    // Deliberately excluded from release builds so it can't be triggered
+    // by an accidental double-press in flight.
     if (encoder_.wasDoublePressed()) {
         gps_.enableMockFeed();
     }
+#endif
 
     if (encoder_.getDelta() != 0) {
         display_.handleEncoderDelta(encoder_.getDelta());
@@ -87,9 +94,7 @@ void Application::loop() {
         lastDisplayMs_ = now;
     }
 
-    if (powerManager_.shouldPowerOff()) {
-        DBGLN("Power-off requested");
-    }
+    powerManager_.update();
 }
 
 void Application::updateSensors() {

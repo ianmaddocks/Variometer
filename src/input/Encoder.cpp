@@ -33,11 +33,30 @@ void Encoder::update() {
         if (encoder_->readStatus(i2cEncoderLibV2::PUSHP)) wasPressed_ = true;
         if (encoder_->readStatus(i2cEncoderLibV2::PUSHD)) wasDoublePressed_ = true;
 
+        if (encoder_->readStatus(i2cEncoderLibV2::PUSHP)) {
+            held_ = true;
+            pressStartMs_ = millis();
+            longPressFired_ = false;
+        }
+        if (encoder_->readStatus(i2cEncoderLibV2::PUSHR)) {
+            held_ = false;
+            longPressFired_ = false;
+        }
+
         DBG("Encoder status: ");
         if (delta_ != 0) DBG("Delta: " + String(delta_) + " ");
         if (wasPressed_) DBG("Pressed ");
         if (wasDoublePressed_) DBG("Double Pressed ");
         DBGLN("");
+    }
+
+    // Checked every call (not just on a fresh I2C event) because the hold
+    // threshold needs to fire as soon as it elapses, independent of when
+    // the encoder chip next reports a new status byte.
+    if (held_ && !longPressFired_ && (millis() - pressStartMs_ >= Config::POWER_OFF_HOLD_MS)) {
+        longPressFired_ = true;
+        longPressPending_ = true;
+        DBGLN("Encoder: long press threshold reached");
     }
 }
 
@@ -49,6 +68,14 @@ bool Encoder::consumeDoublePress() {
         return false;
     }
     wasDoublePressed_ = false;
+    return true;
+}
+
+bool Encoder::consumeLongPress() {
+    if (!longPressPending_) {
+        return false;
+    }
+    longPressPending_ = false;
     return true;
 }
 

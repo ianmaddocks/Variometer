@@ -9,6 +9,8 @@ public:
     Buzzer() = default;
     void begin();
     void update();
+    void setEnabled(bool enabled);
+    bool isEnabled() const { return enabled_; }
     void playStartupTune();
     void playTakeoffTone();
     void playPowerOffTune();

@@ -17,16 +17,24 @@ void BatteryMonitor::update() {
     const float measuredVoltage = adcVoltage * Config::BATTERY_DIVIDER_RATIO;
 
     if (sampleCount_ < Config::BATTERY_SAMPLES) {
+        // Warm-up phase: rollingAverage_ accumulates a running sum of the
+        // first BATTERY_SAMPLES readings; voltage_ is the true average so
+        // far, computed fresh each time.
         rollingAverage_ += measuredVoltage;
         ++sampleCount_;
-    } else {
-        rollingAverage_ = rollingAverage_ * 0.8f + measuredVoltage * 0.2f;
-    }
+        voltage_ = rollingAverage_ / static_cast<float>(sampleCount_);
 
-    if (sampleCount_ >= 1) {
-        voltage_ = rollingAverage_ / (sampleCount_ < Config::BATTERY_SAMPLES ? sampleCount_ : 1.0f);
+        if (sampleCount_ == Config::BATTERY_SAMPLES) {
+            // Convert rollingAverage_ from "sum of N samples" to a true
+            // voltage-scale average so the exponential filter below blends
+            // like-for-like quantities instead of mixing a sum with a
+            // per-sample reading.
+            rollingAverage_ = voltage_;
+        }
     } else {
-        voltage_ = measuredVoltage;
+        // Steady state: rollingAverage_ is already voltage-scaled here.
+        rollingAverage_ = rollingAverage_ * 0.8f + measuredVoltage * 0.2f;
+        voltage_ = rollingAverage_;
     }
 
     if (voltage_ <= Config::BATTERY_MIN_VOLTAGE) {

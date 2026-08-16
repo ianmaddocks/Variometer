@@ -25,7 +25,11 @@ constexpr uint32_t GPS_BAUD = 115200;
 constexpr int BATTERY_PIN = A1;
 constexpr int BUZZER_PIN = D0;
 constexpr int HAPTIC_PIN = D2;
-//constexpr uint32_t POWER_OFF_HOLD_MS = 2000;
+constexpr uint32_t POWER_OFF_HOLD_MS = 2000;
+
+// Delay between a confirmed power-off request and actually entering deep
+// sleep, so the power-off tune has time to finish playing.
+constexpr uint32_t POWER_OFF_TUNE_DELAY_MS = 800;
 constexpr float MAP_MAX_RANGE_KM = 5.0f;
 
 constexpr uint8_t MIN_SATELLITES_DEFAULT = 5;

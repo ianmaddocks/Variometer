@@ -13,6 +13,14 @@ void Buzzer::begin() {
     pulseState_ = PulseState::Idle;
 }
 
+void Buzzer::setEnabled(bool enabled) {
+    enabled_ = enabled;
+    if (!enabled_) {
+        pulseState_ = PulseState::Idle;
+        digitalWrite(Config::BUZZER_PIN, LOW);
+    }
+}
+
 void Buzzer::update() {
     if (!enabled_ || pulseState_ == PulseState::Idle) {
         return;

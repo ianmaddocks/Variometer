@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace variometer {
 
 class PowerManager {
@@ -12,6 +14,7 @@ public:
 
 private:
     bool powerOffRequested_ = false;
+    uint32_t requestedAtMs_ = 0;
 };
 
 }  // namespace variometer
