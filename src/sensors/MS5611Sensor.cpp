@@ -7,13 +7,33 @@
 
 namespace variometer {
 namespace {
+
 constexpr uint8_t kAddressPrimary = 0x76;
 constexpr uint8_t kAddressSecondary = 0x77;
+
 constexpr uint8_t kResetCommand = 0x1E;
-constexpr uint8_t kPromBase = 0xA0;
+
+// MS5611 PROM calibration coefficients:
+// C1 = 0xA2
+// C2 = 0xA4
+// C3 = 0xA6
+// C4 = 0xA8
+// C5 = 0xAA
+// C6 = 0xAC
+constexpr uint8_t kPromBase = 0xA2;
 constexpr uint8_t kReadAdc = 0x00;
-constexpr uint8_t kConvertD1 = 0x40;
-constexpr uint8_t kConvertD2 = 0x50;
+
+// OSR 4096.
+constexpr uint8_t kConvertD1 = 0x48;
+constexpr uint8_t kConvertD2 = 0x58;
+
+// OSR 4096 conversion time is approximately 9.04 ms.
+// We allow 12 ms before reading the result.
+constexpr uint32_t kConversionTimeMs = 10;
+
+constexpr float kSeaLevelPressurePa = 101325.0f;
+constexpr float kAltitudeExponent = 0.190294957f;
+
 }  // namespace
 
 void MS5611Sensor::requestConversion(uint8_t command) {
@@ -25,48 +45,115 @@ void MS5611Sensor::requestConversion(uint8_t command) {
 uint32_t MS5611Sensor::readAdc() {
     Wire.beginTransmission(address_);
     Wire.write(kReadAdc);
-    if (Wire.endTransmission() != 0) {
+
+    const uint8_t error = Wire.endTransmission();
+
+    if (error != 0) {
+        DBGF("MS5611: ADC register select I2C error %u\n", error);
         return 0;
     }
 
-    Wire.requestFrom(address_, static_cast<uint8_t>(3));
-    uint32_t value = 0;
-    for (int i = 0; i < 3 && Wire.available(); ++i) {
-        value = (value << 8) | Wire.read();
+    const uint8_t requested = 3;
+    const uint8_t received = Wire.requestFrom(address_, requested);
+
+    if (received != requested) {
+        DBGF( "MS5611: ADC request got %u bytes, expected %u\n", received, requested);
+        return 0;
     }
-    return value;
+
+    const uint8_t b0 = Wire.read();
+    const uint8_t b1 = Wire.read();
+    const uint8_t b2 = Wire.read();
+    //DBG( "Read ADC successfully\n");
+
+    uint32_t rv = (static_cast<uint32_t>(b0) << 16) |
+                  (static_cast<uint32_t>(b1) << 8) |
+                  (static_cast<uint32_t>(b2));
+    if (rv == 0) {
+        DBGLN("MS5611: ADC read returned zero");
+        DBGF("MS5611: ADC bytes: %02X %02X %02X\n", b0, b1, b2);
+        //rv = 1; //the smallest non-zero value to avoid divide-by-zero errors in calculations.
+    }
+    return rv;
 }
 
 bool MS5611Sensor::readProm() {
     for (int i = 0; i < 6; ++i) {
+        const uint8_t address =
+            static_cast<uint8_t>(kPromBase + (i * 2));
+
         Wire.beginTransmission(address_);
-        Wire.write(static_cast<uint8_t>(kPromBase + (i * 2)));
-        if (Wire.endTransmission() != 0) {
+        Wire.write(address);
+
+        const uint8_t error = Wire.endTransmission();
+        if (error != 0) {
+            DBGF("MS5611: PROM register 0x%02X select I2C error %u\n", address, error);
             return false;
         }
-        Wire.requestFrom(address_, static_cast<uint8_t>(2));
-        if (Wire.available() < 2) {
+
+        const uint8_t received = Wire.requestFrom(address_, static_cast<uint8_t>(2));
+        if (received != 2) {
+            DBGF("MS5611: PROM register 0x%02X request got %u bytes, expected 2\n", address, received);
             return false;
         }
-        prom_[i] = static_cast<uint16_t>((Wire.read() << 8) | Wire.read());
+
+        const uint8_t msb = Wire.read();
+        const uint8_t lsb = Wire.read();
+
+        prom_[i] =
+            static_cast<uint16_t>(
+                (static_cast<uint16_t>(msb) << 8) |
+                static_cast<uint16_t>(lsb));
     }
-    return true;
+
+    // A useful sanity check. Real MS5611 calibration coefficients
+    // should not all be zero or obviously unprogrammed.
+    bool allZero = true;
+
+    for (int i = 0; i < 6; ++i) {
+        if (prom_[i] != 0) {
+            allZero = false;
+            break;
+        }
+    }
+
+    if (allZero) {
+        DBGLN("MS5611: PROM coefficients all zero, treating as unprogrammed/absent device");
+    }
+
+    return !allZero;
 }
 
 void MS5611Sensor::begin() {
     valid_ = false;
-    state_ = State::Idle;
-    lastTransitionMs_ = millis();
+    state_ = State::WaitingPressure;
+
+    pressure_ = 0.0f;
+    temperature_ = 0.0f;
+    altitude_ = 0.0f;
+    relativeAltitude_ = 0.0f;
+
+    pressureRaw_ = 0;
+    temperatureRaw_ = 0;
+
+    referencePressurePa_ = kSeaLevelPressurePa;
+    referenceSet_ = false;
+
     lastDebugMs_ = 0;
 
+    // Find the MS5611.
     address_ = kAddressPrimary;
+
     Wire.beginTransmission(address_);
-    bool found = Wire.endTransmission() == 0;
+    bool found = (Wire.endTransmission() == 0);
+
     if (!found) {
         address_ = kAddressSecondary;
+
         Wire.beginTransmission(address_);
-        found = Wire.endTransmission() == 0;
+        found = (Wire.endTransmission() == 0);
     }
+
     if (!found) {
         DBGLN("MS5611: device not found at 0x76 or 0x77");
         return;
@@ -74,106 +161,321 @@ void MS5611Sensor::begin() {
 
     DBGF("MS5611: using I2C address 0x%02X\n", address_);
 
+    // Reset.
     Wire.beginTransmission(address_);
     Wire.write(kResetCommand);
-    if (Wire.endTransmission() != 0) {
-        DBGLN("MS5611: reset command failed");
+
+    const uint8_t resetError = Wire.endTransmission();
+    if (resetError != 0) {
+        DBGF("MS5611: reset command failed, I2C error %u\n", resetError);
         return;
     }
-    delay(3);
 
+    // Datasheet specifies ~2.8ms reset time; use a safety margin.
+    delay(10);
+
+    // Read C1..C6.
     if (!readProm()) {
         DBGLN("MS5611: PROM read failed");
         return;
     }
 
+    DBGF(
+        "MS5611 PROM: C1=%u C2=%u C3=%u C4=%u C5=%u C6=%u\n",
+        prom_[0],
+        prom_[1],
+        prom_[2],
+        prom_[3],
+        prom_[4],
+        prom_[5]);
+
     valid_ = true;
-    previousAltitude_ = 0.0f;
-    previousAltitudeMs_ = millis();
-    baseAltitude_ = 0.0f;
+
+    // Start the first pressure conversion immediately.
+    requestConversion(kConvertD1);
+    lastTransitionMs_ = millis();
+
     DBGLN("MS5611: initialized");
 }
 
 void MS5611Sensor::update() {
+    const uint32_t now = millis();
     if (!valid_) {
-        const uint32_t now = millis();
         if (now - lastDebugMs_ >= Config::MS5611_DEBUG_INTERVAL_MS) {
-            DBGLN("MS5611: no data; sensor is invalid at both 0x76 and 0x77");
+            DBGLN("MS5611: sensor invalid");
             lastDebugMs_ = now;
         }
         return;
     }
 
-    const uint32_t now = millis();
+    if (now - lastDebugMs_ >= Config::MS5611_DEBUG_INTERVAL_MS) {
+        /*DBGF("MS5611: valid=%d rawP=%lu rawT=%lu pressure=%.2fPa temp=%.2fC alt=%.2fm rel=%.2fm\n",
+                valid_ ? 1 : 0,
+                static_cast<unsigned long>(pressureRaw_),
+                static_cast<unsigned long>(temperatureRaw_),
+                pressure_,
+                temperature_ / 100.0f,
+                altitude_,
+                relativeAltitude_);
+        lastDebugMs_ = now;
+        }*/
+    }
+
     switch (state_) {
-        case State::Idle:
-            if (now - lastTransitionMs_ >= 20) {
+
+        case State::WaitingPressure:
+
+            if (now - lastTransitionMs_ < kConversionTimeMs) {
+                return;
+            }
+
+            pressureRaw_ = readAdc();
+
+            if (pressureRaw_ == 0) {
+                DBGLN("MS5611: invalid pressure ADC read");
+
+                // Try again.
+                requestConversion(kConvertD1); 
+                lastTransitionMs_ = now;
+                return;
+            }
+            //DBGLN("MS5611: pressure ADC read successful");
+
+            // Immediately start temperature conversion.
+            requestConversion(kConvertD2);
+
+            lastTransitionMs_ = now;
+            state_ = State::WaitingTemperature;
+
+            break;
+
+
+        case State::WaitingTemperature:
+
+            if (now - lastTransitionMs_ < kConversionTimeMs) {
+                return;
+            }
+
+            temperatureRaw_ = readAdc();
+
+            if (temperatureRaw_ == 0) {
+                DBGLN("MS5611: invalid temperature ADC read");
+
                 requestConversion(kConvertD1);
                 lastTransitionMs_ = now;
                 state_ = State::WaitingPressure;
+                return;
             }
-            break;
-        case State::WaitingPressure:
-            if (now - lastTransitionMs_ >= 10) {
-                pressureRaw_ = readAdc();
-                requestConversion(kConvertD2);
-                lastTransitionMs_ = now;
-                state_ = State::WaitingTemperature;
-            }
-            break;
-        case State::WaitingTemperature:
-            if (now - lastTransitionMs_ >= 10) {
-                temperatureRaw_ = readAdc();
+            //DBGLN("MS5611: temperature ADC read successful");
 
-                const int32_t dT = static_cast<int32_t>(temperatureRaw_) - (static_cast<int32_t>(prom_[4]) << 8);
-                temperature_ = 2000.0f + (dT / 8388608.0f);
-                const int64_t off = (static_cast<int64_t>(prom_[1]) << 16) + ((static_cast<int64_t>(prom_[3]) * dT) >> 7);
-                const int64_t sens = (static_cast<int64_t>(prom_[0]) << 15) + ((static_cast<int64_t>(prom_[2]) * dT) >> 8);
-                pressure_ = (static_cast<float>(pressureRaw_) * static_cast<float>(sens) / 2097152.0f) - static_cast<float>(off) / 32768.0f;
-                const float computedAltitude = 44330.0f * (1.0f - powf(pressure_ / 101325.0f, 1.0f / 5.255f));
+            processMeasurements();
 
-                if (isfinite(computedAltitude) && computedAltitude > -1000.0f && computedAltitude < 20000.0f) {
-                    altitude_ = computedAltitude;
-                }
+            // Immediately start the next pressure conversion.
+            requestConversion(kConvertD1);
 
-                if (baseAltitude_ == 0.0f) {
-                    baseAltitude_ = altitude_;
-                }
-                relativeAltitude_ = altitude_ - baseAltitude_;
+            lastTransitionMs_ = now;
+            state_ = State::WaitingPressure;
 
-                const uint32_t elapsedMs = now - previousAltitudeMs_;
-                if (elapsedMs > 0) {
-                    const float elapsedSeconds = elapsedMs / 1000.0f;
-                    const float computedVario = (altitude_ - previousAltitude_) / elapsedSeconds;
-                    if (isfinite(computedVario) && fabsf(computedVario) < 50.0f) {
-                        verticalSpeed_ = computedVario;
-                    }
-                }
-                previousAltitude_ = altitude_;
-                previousAltitudeMs_ = now;
-                if (now - lastDebugMs_ >= Config::MS5611_DEBUG_INTERVAL_MS) {
-                    DBGF("MS5611: valid=%d rawP=%lu rawT=%lu pressure=%.2fPa temp=%.2fC alt=%.2fm rel=%.2fm vario=%.2fm/s\n",
-                         valid_ ? 1 : 0,
-                         static_cast<unsigned long>(pressureRaw_),
-                         static_cast<unsigned long>(temperatureRaw_),
-                         pressure_,
-                         temperature_ / 100.0f,
-                         altitude_,
-                         relativeAltitude_,
-                         verticalSpeed_);
-                    lastDebugMs_ = now;
-                }
-                state_ = State::Idle;
-            }
             break;
     }
 }
 
-bool MS5611Sensor::isValid() const { return valid_; }
-float MS5611Sensor::getPressure() const { return pressure_; }
-float MS5611Sensor::getTemperature() const { return temperature_ / 100.0f; }
-float MS5611Sensor::getAltitude() const { return altitude_; }
-float MS5611Sensor::getRelativeAltitude() const { return relativeAltitude_; }
-float MS5611Sensor::getVerticalSpeed() const { return verticalSpeed_; }
+void MS5611Sensor::processMeasurements() {
+    /*
+     * MS5611 first-order calculation.
+     *
+     * C1 = pressure sensitivity
+     * C2 = pressure offset
+     * C3 = temperature coefficient of pressure sensitivity
+     * C4 = temperature coefficient of pressure offset
+     * C5 = reference temperature
+     * C6 = temperature coefficient of temperature
+     */
+
+    const uint32_t now = millis();
+
+    const int64_t dT =
+        static_cast<int64_t>(temperatureRaw_) -
+        (static_cast<int64_t>(prom_[4]) << 8);
+
+    // TEMP is in 0.01 degrees C.
+    int64_t TEMP =
+        2000 +
+        ((dT * static_cast<int64_t>(prom_[5])) >> 23);
+
+    int64_t OFF =
+        (static_cast<int64_t>(prom_[1]) << 16) +
+        ((static_cast<int64_t>(prom_[3]) * dT) >> 7);
+
+    int64_t SENS =
+        (static_cast<int64_t>(prom_[0]) << 15) +
+        ((static_cast<int64_t>(prom_[2]) * dT) >> 8);
+
+
+    /*
+     * Second-order temperature compensation.
+     *
+     * This is particularly important at lower temperatures and
+     * improves the stability of the calculated pressure.
+     */
+
+    int64_t T2 = 0;
+    int64_t OFF2 = 0;
+    int64_t SENS2 = 0;
+
+    if (TEMP < 2000) {
+        T2 =
+            (3LL * dT * dT) >> 33;
+
+        const int64_t tempMinus2000 =
+            TEMP - 2000;
+
+        OFF2 =
+            (61LL * tempMinus2000 * tempMinus2000) >> 4;
+
+        SENS2 =
+            (29LL * tempMinus2000 * tempMinus2000) >> 4;
+
+        if (TEMP < -1500) {
+
+            const int64_t tempPlus1500 =
+                TEMP + 1500;
+
+            OFF2 +=
+                17LL * tempPlus1500 * tempPlus1500;
+
+            SENS2 +=
+                9LL * tempPlus1500 * tempPlus1500;
+        }
+    }
+
+    TEMP -= T2;
+    OFF -= OFF2;
+    SENS -= SENS2;
+
+
+    // Pressure in 0.01 mbar / hPa.
+    // Per datasheet: P = (D1*SENS/2^21 - OFF) / 2^15 -- the final >>15
+    // applies to the whole expression, not just OFF.
+    const int64_t P =
+        (
+            ((static_cast<int64_t>(pressureRaw_) * SENS) >> 21) - OFF
+        ) >> 15;
+
+    /*
+     * P is in 0.01 mbar.
+     * Convert to Pa:
+     *
+     * 1 mbar = 100 Pa
+     * therefore 0.01 mbar = 1 Pa
+     */
+
+    const float newPressurePa =
+        static_cast<float>(P);
+
+    const float newTemperatureC =
+        static_cast<float>(TEMP) / 100.0f;
+
+    if (!isfinite(newPressurePa) ||
+        !isfinite(newTemperatureC)) {
+        DBGLN("MS5611: computed non-finite pressure/temperature, discarding sample");
+        return;
+    }
+
+    // Reject obviously impossible pressure values.
+    if (newPressurePa < 30000.0f ||
+        newPressurePa > 120000.0f) {
+        DBGF("MS5611: pressure %.2fPa out of range, discarding sample\n", newPressurePa);
+        return;
+    }
+
+    pressure_ = newPressurePa;
+    temperature_ = newTemperatureC;
+
+    altitude_ = pressureToAltitude(pressure_);
+
+    if (!isfinite(altitude_) ||
+        altitude_ < -1000.0f ||
+        altitude_ > 20000.0f) {
+        DBGF("MS5611: altitude %.2fm out of range, discarding sample\n", altitude_);
+        return;
+    }
+
+    /*
+     * Establish an initial reference when the first valid
+     * measurement arrives.
+     *
+     * This gives a sensible relative altitude during pre-flight.
+     * The reference is explicitly reset again when takeoff
+     * is detected.
+     */
+    if (!referenceSet_) {
+        referencePressurePa_ = pressure_;
+        referenceSet_ = true;
+    }
+
+    relativeAltitude_ =
+        pressureToAltitude(pressure_) -
+        pressureToAltitude(referencePressurePa_);
+
+    if (now - lastDebugMs_ >= Config::MS5611_DEBUG_INTERVAL_MS) {
+
+        DBGF(
+            "MS5611: P=%.2fPa T=%.2fC alt=%.2fm rel=%.2fm\n",
+            pressure_,
+            temperature_,
+            altitude_,
+            relativeAltitude_);
+
+        lastDebugMs_ = now;
+    }
+}
+
+float MS5611Sensor::pressureToAltitude(float pressurePa) const {
+    if (pressurePa <= 0.0f) {
+        return 0.0f;
+    }
+
+    return 44330.0f *
+           (1.0f -
+            powf(
+                pressurePa / kSeaLevelPressurePa,
+                kAltitudeExponent));
+}
+
+void MS5611Sensor::setTakeoffReference() {
+    if (!valid_ || pressure_ <= 0.0f) {
+        return;
+    }
+
+    referencePressurePa_ = pressure_;
+    referenceSet_ = true;
+
+    relativeAltitude_ = 0.0f;
+
+    DBGF(
+        "MS5611: takeoff reference set to %.2f Pa\n",
+        referencePressurePa_);
+}
+
+bool MS5611Sensor::isValid() const {
+    return valid_;
+}
+
+float MS5611Sensor::getPressure() const {
+    return pressure_;
+}
+
+float MS5611Sensor::getTemperature() const {
+    return temperature_;
+}
+
+float MS5611Sensor::getAltitude() const {
+    return altitude_;
+}
+
+float MS5611Sensor::getRelativeAltitude() const {
+    return relativeAltitude_;
+}
 
 }  // namespace variometer

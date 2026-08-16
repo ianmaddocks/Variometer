@@ -159,6 +159,7 @@ void Application::updateSensors() {
             flightData_.barometricAltitude = currentAltitude;
             flightData_.relativeAltitude = currentAltitude - mockAltitudeBase;
 
+            /*
             const float dt = (now - lastMockAltitudeMs) / 1000.0f;  // Convert milliseconds to seconds
             if (dt > 0.0f) {
                 float derivedVario = (currentAltitude - lastMockAltitude) / dt;
@@ -169,6 +170,8 @@ void Application::updateSensors() {
                 }
                 flightData_.verticalSpeed = derivedVario;
             }
+            */
+            flightData_.verticalSpeed = 0.0f;
             lastMockAltitude = currentAltitude;
             lastMockAltitudeMs = now;
      }
@@ -177,7 +180,6 @@ void Application::updateSensors() {
     } else if (ms5611_.isValid()) {
         flightData_.barometricAltitude = ms5611_.getAltitude();
         flightData_.relativeAltitude = ms5611_.getRelativeAltitude();
-        flightData_.verticalSpeed = ms5611_.getVerticalSpeed();
     }
 
     if ((flightData_.flightState == FlightState::FLIGHT ||
@@ -252,9 +254,18 @@ void Application::initializeFlightSession() {
     }
 
     flightRecorder_.clear();
+
+    // Establish zero altitude at takeoff.
+    ms5611_.setTakeoffReference();
+
+    // Discard pre-flight altitude samples so the first
+    // flight vario calculation starts cleanly.
+    varioCalculator_.reset();
+
     if (!flightLogStorage_.startFlight(gps_.getUtcDateTime())) {
         DBGLN("Unable to start persistent flight log");
     }
+
     lastTraceSampleMs_ = millis() - Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS;
     flightStartTimeMs_ = millis();
     flightData_.flightDuration = 0;
