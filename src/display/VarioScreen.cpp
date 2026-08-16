@@ -30,7 +30,7 @@ void VarioScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().setCursor(0, 1);
     display.display().print("flight ");
     display.display().print((int)(data.flightDuration / 60));
-    display.display().print("mins");
+    display.display().print(" mins");
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Alt:");
     display.display().print(data.barometricAltitude, 1);
