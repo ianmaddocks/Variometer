@@ -12,34 +12,50 @@ void VarioCalculator::reset() {
     verticalSpeed_ = 0.0f;
     rawVerticalSpeed_ = 0.0f;
 
-    initialised_ = false;
+    hasSample_ = false;
+    lastSampleSequence_ = 0;
+
+    filterPrimed_ = false;
+    lastFilterTimeMs_ = 0;
 }
 
-void VarioCalculator::update(const FlightData& data) {
-    const uint32_t now = millis();
-
+void VarioCalculator::update(const FlightData& data,
+                             uint32_t sampleSequence,
+                             uint32_t sampleTimeMs) {
     const float altitude = data.barometricAltitude;
 
     if (!isfinite(altitude)) {
         return;
     }
 
-    // Add the latest altitude sample.
+    /*
+     * Ingest only genuinely new measurements.
+     *
+     * Callers poll far more often than the sensor produces readings. If
+     * we pushed on every call, history would contain runs of identical
+     * altitudes at increasing timestamps -- a staircase -- and the
+     * regression below would report a slope determined by where the step
+     * happened to fall inside the window rather than by the real climb
+     * rate. That is what made the displayed vario alternate between
+     * frozen and wildly wrong.
+     */
+    if (hasSample_ && sampleSequence == lastSampleSequence_) {
+        return;
+    }
+
+    lastSampleSequence_ = sampleSequence;
+    hasSample_ = true;
+
+    // Timestamp with the measurement time supplied by the source, not
+    // millis() here, which would include the poll delay.
     history_.push({
         altitude,
-        now
+        sampleTimeMs
     });
 
     if (history_.size() < 3) {
         return;
     }
-
-    /*
-     * We want approximately the configured regression window.
-     *
-     * At the moment Application::updateFlightLogic() runs every
-     * 50 ms, so a 300 ms window gives us roughly six samples.
-     */
 
     const Sample& newest =
         history_.at(history_.size() - 1);
@@ -67,6 +83,10 @@ void VarioCalculator::update(const FlightData& data) {
 
     uint32_t sampleCount = 0;
 
+    // Age of the oldest sample inside the window, i.e. the regression
+    // baseline. Checked below before the slope is trusted.
+    uint32_t spanMs = 0;
+
     for (size_t i = 0; i < history_.size(); ++i) {
 
         const Sample& sample = history_.at(i);
@@ -76,6 +96,10 @@ void VarioCalculator::update(const FlightData& data) {
 
         if (ageMs > Config::VARIO_REGRESSION_WINDOW_MS) {
             continue;
+        }
+
+        if (ageMs > spanMs) {
+            spanMs = ageMs;
         }
 
         // Work backwards from newest sample.
@@ -94,6 +118,19 @@ void VarioCalculator::update(const FlightData& data) {
     }
 
     if (sampleCount < 3) {
+        return;
+    }
+
+    /*
+     * Require a meaningful baseline before trusting the gradient.
+     *
+     * Immediately after reset() the window holds a few closely spaced
+     * samples; dividing a small altitude change by a very short baseline
+     * amplifies sensor noise into a large false climb rate. Waiting for
+     * a real span costs a fraction of a second at startup and removes
+     * the spurious spike that followed every takeoff reset.
+     */
+    if (spanMs < Config::VARIO_MIN_REGRESSION_SPAN_MS) {
         return;
     }
 
@@ -134,13 +171,50 @@ void VarioCalculator::update(const FlightData& data) {
     rawVerticalSpeed_ = raw;
 
     /*
-     * Exponential low-pass filter.
-     *
-     * A higher alpha responds faster.
-     * A lower alpha is smoother.
+     * Elapsed time since the previous filter update, taken from the
+     * measurement timestamps rather than assumed from a fixed interval.
      */
+    uint32_t dtMs = 0;
+
+    if (filterPrimed_) {
+        dtMs = newest.timeMs - lastFilterTimeMs_;
+    }
+
+    lastFilterTimeMs_ = newest.timeMs;
+
+    if (!filterPrimed_) {
+        // First trusted slope: adopt it directly instead of easing up
+        // from zero, which would otherwise read as a slow false sink.
+        filterPrimed_ = true;
+        verticalSpeed_ = rawVerticalSpeed_;
+        return;
+    }
+
+    if (dtMs == 0) {
+        return;
+    }
+
+    /*
+     * Exponential low-pass filter, expressed as a time constant.
+     *
+     *      alpha = dt / (tau + dt)
+     *
+     * Deriving alpha from the real elapsed time means the filter has the
+     * same physical response no matter how fast samples arrive. The
+     * previous fixed alpha of 0.25 quietly became a different filter
+     * every time loop timing changed.
+     *
+     * Because the longer regression window already removes most of the
+     * noise, tau can stay short here without the reading becoming jumpy.
+     */
+    const float dtSeconds =
+        static_cast<float>(dtMs) / 1000.0f;
+
+    const float tauSeconds =
+        static_cast<float>(Config::VARIO_FILTER_TAU_MS) / 1000.0f;
+
     const float alpha =
-        Config::VARIO_FILTER_ALPHA;
+        dtSeconds / (tauSeconds + dtSeconds);
 
     verticalSpeed_ +=
         alpha *
@@ -151,12 +225,27 @@ void VarioCalculator::update(const FlightData& data) {
      *
      * This prevents the instrument from continually reporting
      * tiny climb/sink values while stationary.
+     *
+     * The decay is also time-based. It was previously a fixed multiply
+     * applied once per update, so how quickly the reading settled to
+     * zero depended on how often the loop happened to run.
      */
     if (fabsf(verticalSpeed_) <
         Config::VARIO_DEADBAND) {
 
-        verticalSpeed_ *=
-            Config::VARIO_ZERO_DECAY;
+        const float decayTauSeconds =
+            static_cast<float>(Config::VARIO_ZERO_DECAY_TAU_MS) / 1000.0f;
+
+        // First-order approximation of exp(-dt / tau); cheaper than
+        // expf() on a soft-float target and accurate for dt << tau.
+        float decay =
+            1.0f - (dtSeconds / decayTauSeconds);
+
+        if (decay < 0.0f) {
+            decay = 0.0f;
+        }
+
+        verticalSpeed_ *= decay;
 
         if (fabsf(verticalSpeed_) <
             Config::VARIO_ZERO_THRESHOLD) {

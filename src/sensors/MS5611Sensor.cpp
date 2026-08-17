@@ -36,10 +36,61 @@ constexpr float kAltitudeExponent = 0.190294957f;
 
 }  // namespace
 
-void MS5611Sensor::requestConversion(uint8_t command) {
+bool MS5611Sensor::requestConversion(uint8_t command) {
     Wire.beginTransmission(address_);
     Wire.write(command);
-    Wire.endTransmission();
+
+    /*
+     * The result of this write used to be discarded, which hid the most
+     * likely cause of "ADC read returned zero": if the convert command
+     * never reaches the chip there is no conversion in progress, so the
+     * subsequent ADC read legitimately returns 0x000000. The read
+     * transaction succeeds, so nothing else in the driver looked wrong.
+     *
+     * A non-zero code here points at the bus rather than the sensor --
+     * see Config::I2C_CLOCK_HZ if these appear in numbers.
+     */
+    const uint8_t error = Wire.endTransmission();
+
+    if (error != 0) {
+        ++counters_.convertFail;
+        lastI2cError_ = error;
+        return false;
+    }
+
+    return true;
+}
+
+uint8_t MS5611Sensor::crc4(uint16_t words[8]) {
+    uint16_t remainder = 0;
+
+    // The CRC nibble itself is excluded from the calculation.
+    const uint16_t originalZero = words[0];
+    const uint16_t originalSeven = words[7];
+
+    words[0] = words[0] & 0x0FFF;
+    words[7] = 0;
+
+    for (uint8_t byteIndex = 0; byteIndex < 16; ++byteIndex) {
+        if ((byteIndex % 2) == 1) {
+            remainder ^= static_cast<uint16_t>(words[byteIndex >> 1] & 0x00FF);
+        } else {
+            remainder ^= static_cast<uint16_t>(words[byteIndex >> 1] >> 8);
+        }
+
+        for (uint8_t bit = 8; bit > 0; --bit) {
+            if (remainder & 0x8000) {
+                remainder = static_cast<uint16_t>((remainder << 1) ^ 0x3000);
+            } else {
+                remainder = static_cast<uint16_t>(remainder << 1);
+            }
+        }
+    }
+
+    words[0] = originalZero;
+    words[7] = originalSeven;
+
+    return static_cast<uint8_t>((remainder >> 12) & 0x000F);
 }
 
 uint32_t MS5611Sensor::readAdc() {
@@ -49,7 +100,8 @@ uint32_t MS5611Sensor::readAdc() {
     const uint8_t error = Wire.endTransmission();
 
     if (error != 0) {
-        DBGF("MS5611: ADC register select I2C error %u\n", error);
+        ++counters_.readFail;
+        lastI2cError_ = error;
         return 0;
     }
 
@@ -57,7 +109,7 @@ uint32_t MS5611Sensor::readAdc() {
     const uint8_t received = Wire.requestFrom(address_, requested);
 
     if (received != requested) {
-        DBGF( "MS5611: ADC request got %u bytes, expected %u\n", received, requested);
+        ++counters_.readFail;
         return 0;
     }
 
@@ -77,16 +129,18 @@ uint32_t MS5611Sensor::readAdc() {
                         (static_cast<uint32_t>(b2));
 #endif
 
-    if (rv == 0) {
-        DBGLN("MS5611: ADC read returned zero");
-        DBGF("MS5611: ADC bytes: %02X %02X %02X\n", b0, b1, b2);
-        //rv = 1; //the smallest non-zero value to avoid divide-by-zero errors in calculations.
-    }
+    /*
+     * A zero result here means the chip had no conversion result to
+     * give -- almost always because the convert command never landed.
+     * Counted by the caller (pressure vs temperature) rather than
+     * logged, see Counters.
+     */
     return rv;
 }
 
 bool MS5611Sensor::readProm() {
-    for (int i = 0; i < 6; ++i) {
+    // Read all eight words (0xA0..0xAE) so the CRC nibble is available.
+    for (int i = 0; i < 8; ++i) {
         const uint8_t address =
             static_cast<uint8_t>(kPromBase + (i * 2));
 
@@ -108,7 +162,7 @@ bool MS5611Sensor::readProm() {
         const uint8_t msb = Wire.read();
         const uint8_t lsb = Wire.read();
 
-        prom_[i] =
+        promWords_[i] =
             static_cast<uint16_t>(
                 (static_cast<uint16_t>(msb) << 8) |
                 static_cast<uint16_t>(lsb));
@@ -118,8 +172,8 @@ bool MS5611Sensor::readProm() {
     // should not all be zero or obviously unprogrammed.
     bool allZero = true;
 
-    for (int i = 0; i < 6; ++i) {
-        if (prom_[i] != 0) {
+    for (int i = 1; i <= 6; ++i) {
+        if (promWords_[i] != 0) {
             allZero = false;
             break;
         }
@@ -127,9 +181,31 @@ bool MS5611Sensor::readProm() {
 
     if (allZero) {
         DBGLN("MS5611: PROM coefficients all zero, treating as unprogrammed/absent device");
+        return false;
     }
 
-    return !allZero;
+    /*
+     * Verify the calibration data against its own CRC.
+     *
+     * We deliberately do NOT refuse to run on a CRC mismatch -- a
+     * working barometer is more useful than none -- but a failure here
+     * means every derived pressure and altitude is suspect, so it is
+     * logged loudly and exposed via hasValidPromCrc().
+     */
+    const uint8_t expected = static_cast<uint8_t>(promWords_[7] & 0x000F);
+    const uint8_t computed = crc4(promWords_);
+
+    promCrcValid_ = (expected == computed);
+
+    if (!promCrcValid_) {
+        DBGF("MS5611: PROM CRC MISMATCH (expected %u, computed %u) -- "
+             "calibration data is corrupt, pressure/altitude will be wrong\n",
+             expected, computed);
+    } else {
+        DBGLN("MS5611: PROM CRC OK");
+    }
+
+    return true;
 }
 
 void MS5611Sensor::begin() {
@@ -145,7 +221,12 @@ void MS5611Sensor::begin() {
     temperatureRaw_ = 0;
 
     referencePressurePa_ = kSeaLevelPressurePa;
+    referenceAltitude_ = 0.0f;
     referenceSet_ = false;
+    promCrcValid_ = false;
+
+    sampleSequence_ = 0;
+    sampleTimeMs_ = 0;
 
     lastDebugMs_ = 0;
 
@@ -189,13 +270,15 @@ void MS5611Sensor::begin() {
     }
 
     DBGF(
-        "MS5611 PROM: C1=%u C2=%u C3=%u C4=%u C5=%u C6=%u\n",
-        prom_[0],
-        prom_[1],
-        prom_[2],
-        prom_[3],
-        prom_[4],
-        prom_[5]);
+        "MS5611 PROM: C1=%u C2=%u C3=%u C4=%u C5=%u C6=%u (word0=0x%04X word7=0x%04X)\n",
+        promWords_[1],
+        promWords_[2],
+        promWords_[3],
+        promWords_[4],
+        promWords_[5],
+        promWords_[6],
+        promWords_[0],
+        promWords_[7]);
 
     valid_ = true;
 
@@ -237,16 +320,22 @@ void MS5611Sensor::update() {
                 return;
             }
 
-            pressureRaw_ = readAdc();
+        {
+            // Keep the previous good value if this read fails, so the
+            // diagnostics above still show the last real measurement.
+            const uint32_t rawPressure = readAdc();
 
-            if (pressureRaw_ == 0) {
-                DBGLN("MS5611: invalid pressure ADC read");
+            if (rawPressure == 0) {
+                ++counters_.adcFailPressure;
 
                 // Try again.
-                requestConversion(kConvertD1); 
+                requestConversion(kConvertD1);
                 lastTransitionMs_ = now;
                 return;
             }
+
+            pressureRaw_ = rawPressure;
+        }
             //DBGLN("MS5611: pressure ADC read successful");
 
             // Immediately start temperature conversion.
@@ -264,16 +353,20 @@ void MS5611Sensor::update() {
                 return;
             }
 
-            temperatureRaw_ = readAdc();
+        {
+            const uint32_t rawTemperature = readAdc();
 
-            if (temperatureRaw_ == 0) {
-                DBGLN("MS5611: invalid temperature ADC read");
+            if (rawTemperature == 0) {
+                ++counters_.adcFailTemp;
 
                 requestConversion(kConvertD1);
                 lastTransitionMs_ = now;
                 state_ = State::WaitingPressure;
                 return;
             }
+
+            temperatureRaw_ = rawTemperature;
+        }
             //DBGLN("MS5611: temperature ADC read successful");
 
             processMeasurements();
@@ -302,22 +395,23 @@ void MS5611Sensor::processMeasurements() {
 
     const uint32_t now = millis();
 
+    // promWords_ is indexed by PROM address, so C1..C6 are [1]..[6].
     const int64_t dT =
         static_cast<int64_t>(temperatureRaw_) -
-        (static_cast<int64_t>(prom_[4]) << 8);
+        (static_cast<int64_t>(promWords_[5]) << 8);
 
     // TEMP is in 0.01 degrees C.
     int64_t TEMP =
         2000 +
-        ((dT * static_cast<int64_t>(prom_[5])) >> 23);
+        ((dT * static_cast<int64_t>(promWords_[6])) >> 23);
 
     int64_t OFF =
-        (static_cast<int64_t>(prom_[1]) << 16) +
-        ((static_cast<int64_t>(prom_[3]) * dT) >> 7);
+        (static_cast<int64_t>(promWords_[2]) << 16) +
+        ((static_cast<int64_t>(promWords_[4]) * dT) >> 7);
 
     int64_t SENS =
-        (static_cast<int64_t>(prom_[0]) << 15) +
-        ((static_cast<int64_t>(prom_[2]) * dT) >> 8);
+        (static_cast<int64_t>(promWords_[1]) << 15) +
+        ((static_cast<int64_t>(promWords_[3]) * dT) >> 8);
 
 
     /*
@@ -325,6 +419,22 @@ void MS5611Sensor::processMeasurements() {
      *
      * This is particularly important at lower temperatures and
      * improves the stability of the calculated pressure.
+     *
+     * IMPORTANT: these coefficients are chip-specific. This code
+     * previously used the MS5607 values (61/2^4, 29/2^4, 17, 9), which
+     * are wrong for the MS5611 and biased altitude below 20 C. The
+     * values below are from the MS5611-01BA03 datasheet:
+     *
+     *   if (TEMP < 2000):
+     *       T2    = dT^2 / 2^31
+     *       OFF2  = 5 * (TEMP - 2000)^2 / 2
+     *       SENS2 = 5 * (TEMP - 2000)^2 / 4
+     *   if (TEMP < -1500):
+     *       OFF2  += 7  * (TEMP + 1500)^2
+     *       SENS2 += 11 * (TEMP + 1500)^2 / 2
+     *
+     * Do not copy these from an MS5607 driver -- the chips share a
+     * register map and calculation shape but not these constants.
      */
 
     int64_t T2 = 0;
@@ -332,17 +442,17 @@ void MS5611Sensor::processMeasurements() {
     int64_t SENS2 = 0;
 
     if (TEMP < 2000) {
-        T2 =
-            (3LL * dT * dT) >> 33;
+        T2 = (dT * dT) >> 31;
 
         const int64_t tempMinus2000 =
             TEMP - 2000;
 
+        // 5 * t^2 / 2 and 5 * t^2 / 4, kept in integer arithmetic.
         OFF2 =
-            (61LL * tempMinus2000 * tempMinus2000) >> 4;
+            (5LL * tempMinus2000 * tempMinus2000) >> 1;
 
         SENS2 =
-            (29LL * tempMinus2000 * tempMinus2000) >> 4;
+            (5LL * tempMinus2000 * tempMinus2000) >> 2;
 
         if (TEMP < -1500) {
 
@@ -350,10 +460,11 @@ void MS5611Sensor::processMeasurements() {
                 TEMP + 1500;
 
             OFF2 +=
-                17LL * tempPlus1500 * tempPlus1500;
+                7LL * tempPlus1500 * tempPlus1500;
 
+            // 11 * t^2 / 2
             SENS2 +=
-                9LL * tempPlus1500 * tempPlus1500;
+                (11LL * tempPlus1500 * tempPlus1500) >> 1;
         }
     }
 
@@ -393,19 +504,24 @@ void MS5611Sensor::processMeasurements() {
     // Reject obviously impossible pressure values.
     if (newPressurePa < 30000.0f ||
         newPressurePa > 120000.0f) {
-        DBGF("MS5611: pressure %.2fPa out of range, discarding sample\n", newPressurePa);
+        ++counters_.rangeReject;
         return;
     }
 
-    pressure_ = newPressurePa;
-    temperature_ = newTemperatureC;
+    /*
+     * Validate into locals and only commit once every check has passed.
+     *
+     * The previous version assigned pressure_/temperature_/altitude_
+     * first and range-checked afterwards, so a rejected sample had
+     * already been published to getAltitude() by the time we bailed out.
+     * That let a single bad reading reach the vario and the display.
+     */
+    const float newAltitude = pressureToAltitude(newPressurePa);
 
-    altitude_ = pressureToAltitude(pressure_);
-
-    if (!isfinite(altitude_) ||
-        altitude_ < -1000.0f ||
-        altitude_ > 20000.0f) {
-        DBGF("MS5611: altitude %.2fm out of range, discarding sample\n", altitude_);
+    if (!isfinite(newAltitude) ||
+        newAltitude < -1000.0f ||
+        newAltitude > 20000.0f) {
+        ++counters_.rangeReject;
         return;
     }
 
@@ -418,22 +534,50 @@ void MS5611Sensor::processMeasurements() {
      * is detected.
      */
     if (!referenceSet_) {
-        referencePressurePa_ = pressure_;
+        referencePressurePa_ = newPressurePa;
+        referenceAltitude_ = newAltitude;
         referenceSet_ = true;
     }
 
-    relativeAltitude_ =
-        pressureToAltitude(pressure_) -
-        pressureToAltitude(referencePressurePa_);
+    // Sample accepted -- publish it as one consistent set.
+    pressure_ = newPressurePa;
+    temperature_ = newTemperatureC;
+    altitude_ = newAltitude;
+
+    // referenceAltitude_ is cached, so this costs no extra powf().
+    relativeAltitude_ = newAltitude - referenceAltitude_;
+
+    /*
+     * Announce the new sample. Consumers (VarioCalculator via
+     * Application) watch this counter so they only ingest genuinely
+     * fresh readings, and use sampleTimeMs_ as the measurement time.
+     */
+    sampleTimeMs_ = now;
+    ++sampleSequence_;
+    ++counters_.samples;
 
     if (now - lastDebugMs_ >= Config::MS5611_DEBUG_INTERVAL_MS) {
 
+        /*
+         * Raw values are included so a bad reading can be traced to its
+         * source without a rebuild: D1/D2 show what the chip returned,
+         * dT/OFF/SENS show what the calibration did with it. A sane D1
+         * with a wrong P means the coefficients are at fault; a wild D1
+         * means the conversion or the bus is.
+         */
         DBGF(
-            "MS5611: P=%.2fPa T=%.2fC alt=%.2fm rel=%.2fm\n",
+            "MS5611: P=%.2fPa T=%.2fC alt=%.2fm rel=%.2fm | D1=%lu D2=%lu "
+            "dT=%ld OFF=%lld SENS=%lld crc=%s\n",
             pressure_,
             temperature_,
             altitude_,
-            relativeAltitude_);
+            relativeAltitude_,
+            static_cast<unsigned long>(pressureRaw_),
+            static_cast<unsigned long>(temperatureRaw_),
+            static_cast<long>(dT),
+            static_cast<long long>(OFF),
+            static_cast<long long>(SENS),
+            promCrcValid_ ? "OK" : "BAD");
 
         lastDebugMs_ = now;
     }
@@ -457,6 +601,10 @@ void MS5611Sensor::setTakeoffReference() {
     }
 
     referencePressurePa_ = pressure_;
+
+    // Cache the matching altitude so relativeAltitude_ stays a single
+    // subtraction rather than a second powf() on every sample.
+    referenceAltitude_ = pressureToAltitude(pressure_);
     referenceSet_ = true;
 
     relativeAltitude_ = 0.0f;
@@ -464,6 +612,38 @@ void MS5611Sensor::setTakeoffReference() {
     DBGF(
         "MS5611: takeoff reference set to %.2f Pa\n",
         referencePressurePa_);
+}
+
+bool MS5611Sensor::hasValidPromCrc() const {
+    return promCrcValid_;
+}
+
+const MS5611Sensor::Counters& MS5611Sensor::getCounters() const {
+    return counters_;
+}
+
+void MS5611Sensor::resetCounters() {
+    counters_ = Counters{};
+}
+
+uint8_t MS5611Sensor::getLastI2cError() const {
+    return lastI2cError_;
+}
+
+uint32_t MS5611Sensor::getRawPressure() const {
+    return pressureRaw_;
+}
+
+uint32_t MS5611Sensor::getRawTemperature() const {
+    return temperatureRaw_;
+}
+
+uint32_t MS5611Sensor::getSampleSequence() const {
+    return sampleSequence_;
+}
+
+uint32_t MS5611Sensor::getSampleTimeMs() const {
+    return sampleTimeMs_;
 }
 
 bool MS5611Sensor::isValid() const {

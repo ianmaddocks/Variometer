@@ -18,6 +18,28 @@
 namespace Config {
 constexpr int I2C_SDA = D9;
 constexpr int I2C_SCL = D10;
+
+/*
+ * I2C bus speed.
+ *
+ * This MUST be set explicitly. The ESP32 Arduino core defaults Wire to
+ * 100 kHz, which is far too slow for a 128x128 OLED:
+ *
+ *   128 x 128 pixels / 8 = 2048 bytes of framebuffer
+ *   2048 bytes x 9 bit-times (8 data + 1 ACK) = 18432 bit-times
+ *   18432 / 100000 Hz  = ~184 ms for a single full-screen refresh
+ *   18432 / 400000 Hz  =  ~46 ms for a single full-screen refresh
+ *
+ * At 100 kHz a full redraw took longer than DISPLAY_UPDATE_INTERVAL_MS,
+ * so the main loop was permanently saturated by display traffic. Because
+ * every other subsystem is polled once per loop pass, that starved the
+ * MS5611 down to roughly 2.6 samples/second and made the vario erratic.
+ * See VarioCalculator.cpp for why sample rate mattered so much.
+ *
+ * 400 kHz (I2C "fast mode") is supported by all three devices on this
+ * bus: MS5611, SH1107 and the DuPPa encoder.
+ */
+constexpr uint32_t I2C_CLOCK_HZ = 400000;
 constexpr int GPS_RX = D8;
 constexpr int GPS_TX = D7;
 constexpr uint32_t GPS_BAUD = 115200;
@@ -32,7 +54,20 @@ constexpr uint32_t POWER_OFF_TUNE_DELAY_MS = 800;
 constexpr float MAP_MAX_RANGE_KM = 5.0f;
 
 constexpr uint8_t MIN_SATELLITES_DEFAULT = 5;
+
+// Nominal fix rate of the receiver itself (informational).
 constexpr uint32_t GPS_UPDATE_INTERVAL_MS = 1000;
+
+/*
+ * Size of the UART receive buffer used to hold incoming NMEA.
+ *
+ * At 115200 baud the M10 produces ~11.5 kB/second. The Arduino default
+ * RX buffer is only 256 bytes, so anything longer than ~22 ms between
+ * drains overflows and shreds sentences mid-line. We now drain the port
+ * every loop pass (see Application::updateSensors) but keep a generous
+ * buffer so a slow display refresh cannot cost us a fix.
+ */
+constexpr size_t GPS_RX_BUFFER_BYTES = 2048;
 
 constexpr uint32_t DISPLAY_UPDATE_INTERVAL_MS = 100;
 constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 1000;
@@ -53,20 +88,66 @@ constexpr uint32_t ENCODER_I2C_ADDRESS = 0x01;
 constexpr uint8_t ENCODER_DOUBLE_PRESS_PERIOD = 50;
 
 constexpr uint32_t MS5611_UPDATE_INTERVAL_MS = 20;
-constexpr uint32_t MS5611_UPDATE_INTERVAL_GPS = 1000;
 constexpr uint32_t MS5611_DEBUG_INTERVAL_MS = 5000;
+
+/*
+ * Interval for the consolidated HEALTH line.
+ *
+ * Reports rates and counters rather than individual events. Per-event
+ * logging of a fault that recurs every few hundred ms costs ~10 ms of
+ * blocking serial write each time at 115200 baud, which perturbs the
+ * very loop timing being measured.
+ */
+constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 5000;
 constexpr float VARIO_MAX_CLIMB = 5.0f;
 constexpr float VARIO_MAX_SINK = -5.0f;
-constexpr uint32_t VARIO_REGRESSION_WINDOW_MS = 300;
-// Exponential smoothing.
-// 0.25 gives reasonably quick response without excessive noise.
-constexpr float VARIO_FILTER_ALPHA = 0.25f;
+
+/*
+ * Length of the linear-regression window used to derive vertical speed.
+ *
+ * Regression slope noise falls off very fast as the window grows --
+ * roughly as T^-1.5 -- so the window length matters far more than the
+ * smoothing filter that follows it. Using the MS5611's datasheet noise
+ * at OSR 4096 (~0.1 m RMS of altitude):
+ *
+ *   300 ms window  @ 20 Hz  ->  ~0.47 m/s of noise on the raw slope
+ *  1000 ms window  @ 25 Hz  ->  ~0.07 m/s of noise on the raw slope
+ *
+ * The old 300 ms window forced heavy post-filtering to stay readable,
+ * and that filtering is what caused the sluggish-yet-jumpy response.
+ * A longer window here is what lets VARIO_FILTER_TAU_MS stay short.
+ */
+constexpr uint32_t VARIO_REGRESSION_WINDOW_MS = 1000;
+
+/*
+ * Minimum time between oldest and newest sample before a slope is
+ * trusted. Guards against dividing a small altitude change by a very
+ * short baseline just after a reset, which yields a huge false vario.
+ */
+constexpr uint32_t VARIO_MIN_REGRESSION_SPAN_MS = 250;
+
+/*
+ * Smoothing time constant applied after the regression.
+ *
+ * Expressed as a time constant rather than a fixed EMA alpha so the
+ * filter behaves identically regardless of sample rate. The previous
+ * fixed alpha of 0.25 silently changed meaning whenever loop timing
+ * changed; at the intended 20 Hz it was equivalent to ~150 ms.
+ *
+ * Lower = snappier and noisier. Higher = smoother and laggier.
+ */
+constexpr uint32_t VARIO_FILTER_TAU_MS = 200;
 
 // Ignore very small vertical-speed values.
 constexpr float VARIO_DEADBAND = 0.08f;
 
-// Rate at which the vario decays toward zero inside the deadband.
-constexpr float VARIO_ZERO_DECAY = 0.85f;
+/*
+ * Time constant for decaying the reading toward zero inside the
+ * deadband. Also expressed as a time constant for the reason above --
+ * the old per-update multiply meant the decay rate depended entirely
+ * on how often the loop happened to run.
+ */
+constexpr uint32_t VARIO_ZERO_DECAY_TAU_MS = 300;
 
 // Once below this value, force the result to exactly zero.
 constexpr float VARIO_ZERO_THRESHOLD = 0.03f;

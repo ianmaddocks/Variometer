@@ -35,6 +35,15 @@ float parseCoordinate(const String& value, const String& hemi) {
 }  // namespace
 
 void GPS::begin() {
+    /*
+     * Must be called before begin() -- the driver allocates the RX
+     * buffer during begin() and ignores later resize requests.
+     *
+     * The 256-byte default holds only ~22 ms of traffic at 115200 baud,
+     * so any pause in the main loop (a display refresh, for instance)
+     * silently truncated NMEA sentences mid-line.
+     */
+    Serial1.setRxBufferSize(Config::GPS_RX_BUFFER_BYTES);
     Serial1.begin(Config::GPS_BAUD, SERIAL_8N1, Config::GPS_RX, Config::GPS_TX);
     hasData_ = false;
     latitude_ = 0.0f;

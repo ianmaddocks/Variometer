@@ -23,6 +23,20 @@ void Application::begin() {
     Serial.begin(115200);
     Wire.begin(Config::I2C_SDA, Config::I2C_SCL);
 
+    /*
+     * Must be set explicitly -- the Arduino core leaves Wire at 100 kHz,
+     * where a single full 128x128 OLED refresh takes ~184 ms and starves
+     * every other subsystem in loop(). See Config::I2C_CLOCK_HZ.
+     */
+    Wire.setClock(Config::I2C_CLOCK_HZ);
+
+    DBGF("I2C bus configured at %lu Hz\n",
+         static_cast<unsigned long>(Config::I2C_CLOCK_HZ));
+
+    // Enumerate the bus before any driver touches it, so a device that
+    // is absent or marginal at this clock speed shows up immediately.
+    scanI2cBus();
+
     gps_.begin();
     ms5611_.begin();
     encoder_.begin();
@@ -42,7 +56,93 @@ void Application::begin() {
     buzzer_.playStartupTune();
 }
 
+void Application::scanI2cBus() {
+    uint8_t found = 0;
+
+    DBGLN("I2C scan:");
+
+    for (uint8_t address = 0x08; address <= 0x77; ++address) {
+        Wire.beginTransmission(address);
+
+        if (Wire.endTransmission() == 0) {
+            const char* name = "unknown";
+
+            if (address == 0x76 || address == 0x77) {
+                name = "MS5611";
+            } else if (address == 0x3C || address == 0x3D) {
+                name = "SH1107 OLED";
+            } else if (address == Config::ENCODER_I2C_ADDRESS) {
+                name = "DuPPa encoder";
+            }
+
+            DBGF("  0x%02X  %s\n", address, name);
+            ++found;
+        }
+    }
+
+    DBGF("I2C scan complete, %u device(s) responding\n", found);
+}
+
+void Application::reportHealth() {
+    const MS5611Sensor::Counters& baro = ms5611_.getCounters();
+
+    const uint32_t elapsedMs =
+        (lastHealthMs_ == 0) ? Config::HEALTH_REPORT_INTERVAL_MS
+                             : (millis() - lastHealthMs_);
+
+    const float seconds =
+        (elapsedMs > 0) ? (static_cast<float>(elapsedMs) / 1000.0f) : 1.0f;
+
+    const uint32_t loopAvgUs =
+        (loopCount_ > 0) ? (loopSumUs_ / loopCount_) : 0;
+
+    const uint32_t displayAvgUs =
+        (displayCount_ > 0) ? (displaySumUs_ / displayCount_) : 0;
+
+    /*
+     * One line, everything needed to tell the three candidate faults
+     * apart:
+     *   loop  -- is anything still blocking the main loop?
+     *   disp  -- is the display flush the thing blocking it?
+     *   baro  -- how many good samples vs each distinct failure mode
+     *   alt   -- what rate is the vario actually being fed at
+     */
+    DBGF("HEALTH: loop=%luHz avg=%luus max=%luus | disp=%luHz avg=%luus max=%luus | "
+         "baro=%.1f/s ok=%lu pFail=%lu tFail=%lu cmdFail=%lu rdFail=%lu rng=%lu i2cErr=%u crc=%s | "
+         "alt=%.1f/s vario=%.2fm/s heap=%lu\n",
+         static_cast<unsigned long>(loopCount_ / (seconds > 0 ? seconds : 1)),
+         static_cast<unsigned long>(loopAvgUs),
+         static_cast<unsigned long>(loopMaxUs_),
+         static_cast<unsigned long>(displayCount_ / (seconds > 0 ? seconds : 1)),
+         static_cast<unsigned long>(displayAvgUs),
+         static_cast<unsigned long>(displayMaxUs_),
+         static_cast<double>(baro.samples) / seconds,
+         static_cast<unsigned long>(baro.samples),
+         static_cast<unsigned long>(baro.adcFailPressure),
+         static_cast<unsigned long>(baro.adcFailTemp),
+         static_cast<unsigned long>(baro.convertFail),
+         static_cast<unsigned long>(baro.readFail),
+         static_cast<unsigned long>(baro.rangeReject),
+         ms5611_.getLastI2cError(),
+         ms5611_.hasValidPromCrc() ? "OK" : "BAD",
+         static_cast<double>(altitudeSampleCount_) / seconds,
+         flightData_.verticalSpeed,
+         static_cast<unsigned long>(ESP.getFreeHeap()));
+
+    // Reset for the next interval so every line reports a rate.
+    ms5611_.resetCounters();
+    loopCount_ = 0;
+    loopMaxUs_ = 0;
+    loopSumUs_ = 0;
+    displayCount_ = 0;
+    displayMaxUs_ = 0;
+    displaySumUs_ = 0;
+    altitudeSampleCount_ = 0;
+    lastHealthMs_ = millis();
+}
+
 void Application::loop() {
+    const uint32_t loopStartUs = micros();
     const uint32_t now = millis();
 
 #ifdef NDEBUG
@@ -90,22 +190,62 @@ void Application::loop() {
     }
 
     if (now - lastDisplayMs_ >= Config::DISPLAY_UPDATE_INTERVAL_MS) {
+        // Timed separately: the full 128x128 flush is the single
+        // biggest block of I2C traffic in the system and the prime
+        // suspect whenever the loop rate collapses.
+        const uint32_t displayStartUs = micros();
+
         updateDisplay();
+
+        const uint32_t displayUs = micros() - displayStartUs;
+
+        displaySumUs_ += displayUs;
+        ++displayCount_;
+
+        if (displayUs > displayMaxUs_) {
+            displayMaxUs_ = displayUs;
+        }
+
         lastDisplayMs_ = now;
     }
 
     if (powerManager_.shouldPowerOff()) {
         DBGLN("Power-off requested");
     }
+
+    /*
+     * Loop timing is sampled last so it covers the whole pass. max is
+     * more diagnostic than avg here -- a single long stall is what
+     * starves the sensor state machine, and it disappears into an
+     * average.
+     */
+    const uint32_t loopUs = micros() - loopStartUs;
+
+    loopSumUs_ += loopUs;
+    ++loopCount_;
+
+    if (loopUs > loopMaxUs_) {
+        loopMaxUs_ = loopUs;
+    }
+
+    if (now - lastHealthMs_ >= Config::HEALTH_REPORT_INTERVAL_MS) {
+        reportHealth();
+    }
 }
 
 void Application::updateSensors() {
     const uint32_t now = millis();
-    if (now - lastMsGps_ >= Config::MS5611_UPDATE_INTERVAL_GPS) {
-        gps_.update();
-        lastMsGps_ = now;
-    }
-    
+
+    /*
+     * Drain the GPS UART every pass, not on a timer.
+     *
+     * At 115200 baud the receiver emits ~11.5 kB/second, so the old
+     * 1000 ms polling interval overflowed the RX buffer many times over
+     * between reads and delivered truncated NMEA. gps_.update() returns
+     * immediately when nothing is waiting, so this is cheap.
+     */
+    gps_.update();
+
     if (now - lastMs5611Ms_ >= Config::MS5611_UPDATE_INTERVAL_MS) {
         ms5611_.update();
         lastMs5611Ms_ = now;
@@ -181,12 +321,35 @@ void Application::updateSensors() {
             flightData_.verticalSpeed = 0.0f;
             lastMockAltitude = currentAltitude;
             lastMockAltitudeMs = now;
+
+            // Mock feed is the altitude source here, so it advertises
+            // the new sample just as the barometer would.
+            altitudeSampleTimeMs_ = now;
+            ++altitudeSampleSeq_;
+            ++altitudeSampleCount_;
      }
 
-       
+
     } else if (ms5611_.isValid()) {
         flightData_.barometricAltitude = ms5611_.getAltitude();
         flightData_.relativeAltitude = ms5611_.getRelativeAltitude();
+
+        /*
+         * Forward the barometer's own sample handshake to the vario.
+         *
+         * We deliberately publish the sensor's measurement timestamp
+         * rather than `now`: the reading may have completed up to one
+         * poll interval ago, and feeding the readout time into the
+         * regression added that error to every sample.
+         */
+        const uint32_t sensorSeq = ms5611_.getSampleSequence();
+
+        if (sensorSeq != lastMs5611Seq_) {
+            lastMs5611Seq_ = sensorSeq;
+            altitudeSampleTimeMs_ = ms5611_.getSampleTimeMs();
+            ++altitudeSampleSeq_;
+            ++altitudeSampleCount_;
+        }
     }
 
     if ((flightData_.flightState == FlightState::FLIGHT ||
@@ -240,7 +403,13 @@ void Application::updateFlightLogic() {
         flightLogStorage_.finishFlight(flightData_.flightDuration);
     }
     flightData_.flightState = detectorState;
-    varioCalculator_.update(flightData_);
+
+    /*
+     * Safe to call every pass: the calculator ingests a sample only when
+     * altitudeSampleSeq_ changes, so it tracks the true measurement rate
+     * instead of this function's polling rate.
+     */
+    varioCalculator_.update(flightData_, altitudeSampleSeq_, altitudeSampleTimeMs_);
     flightData_.verticalSpeed = varioCalculator_.getVerticalSpeed();
     windEstimator_.update(flightData_);
     flightData_.windSpeed = windEstimator_.getWindSpeed();

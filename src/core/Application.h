@@ -32,7 +32,8 @@ private:
 
     FlightData flightData_;
     DeviceSettings settings_;
-    uint32_t lastMsGps_ = 0;
+    // NOTE: there is deliberately no lastGpsMs_ -- the GPS UART is
+    // drained every loop pass. See Application::updateSensors().
     uint32_t lastMs5611Ms_ = 0;
     uint32_t lastBatteryMs_ = 0;
     uint32_t lastLogicMs_ = 0;
@@ -58,6 +59,44 @@ private:
     float mockAltitudeBase = 0.0f;
     float lastMockAltitude = 0.0f;
     uint32_t lastMockAltitudeMs = 0;
+
+    /*
+     * Altitude sample handshake handed to VarioCalculator.
+     *
+     * Incremented once per genuinely new altitude reading, whatever the
+     * active source (barometer or mock GPS feed). Keeping this in
+     * Application means VarioCalculator does not need to know which
+     * source is live, and the vario's sample rate follows the sensor
+     * rather than the loop rate.
+     */
+    uint32_t altitudeSampleSeq_ = 0;
+    uint32_t altitudeSampleTimeMs_ = 0;
+
+    // Last MS5611 sequence seen, used to detect a fresh barometer sample.
+    uint32_t lastMs5611Seq_ = 0;
+
+    /*
+     * Health / timing instrumentation.
+     *
+     * The whole diagnosis of the erratic vario rested on an assumption
+     * about how long a loop pass actually takes. These measure it rather
+     * than assume it: if loopRate is far below the ~50 Hz the timing
+     * gates expect, something is still blocking the loop.
+     */
+    void reportHealth();
+
+    uint32_t lastHealthMs_ = 0;
+    uint32_t loopCount_ = 0;
+    uint32_t loopMaxUs_ = 0;
+    uint32_t loopSumUs_ = 0;
+    uint32_t displayCount_ = 0;
+    uint32_t displayMaxUs_ = 0;
+    uint32_t displaySumUs_ = 0;
+    uint32_t altitudeSampleCount_ = 0;
+
+    // Scans the shared bus once at startup and lists responding
+    // addresses, so a missing or intermittent device is obvious.
+    void scanI2cBus();
 };
 
 }  // namespace variometer
