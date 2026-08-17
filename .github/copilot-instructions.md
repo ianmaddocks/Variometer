@@ -46,7 +46,7 @@ GPS uses a separate hardware serial connection.
   
 ## I2C Encoder  
 Use the DuPPA i2c encoder library:  
-++[https://github.com/DuPPadotnet/ArduinoDuPPaLib]++  
+[ArduinoDuPPaLib](https://github.com/DuPPadotnet/ArduinoDuPPaLib)  
 Do not reinvent the encoder protocol.  
 Use the library for:  
 * Rotary encoder rotation  
@@ -63,6 +63,8 @@ The encoder is fixed with a tri-colour LED.  This led will show a colour if both
 | Red          | <=30%    | Any value       |
 | Yellow       | >30%     | <5 satellites   |
 | flashing Red | <=10%    | Any value       |
+
+Rules are evaluated in the order above with flashing Red taking highest priority: a battery at or below 10% must flash red even though it also satisfies the plain "<=30%" Red condition.
   
   
 ⸻  
@@ -126,12 +128,12 @@ The buzzer is controlled from D0.
 D0 drives an NPN transistor which drives the buzzer.  
 Create a dedicated audio/buzzer interface.  
 Do not directly manipulate the buzzer from screen code.  
-The audio system should follow the sound setting defined here: [https://www.windeckfalken.de/special/xctracer/handson/main.html]
+The audio system should follow the sound setting defined here: [XCTracer vario sound settings](https://www.windeckfalken.de/special/xctracer/handson/main.html)
   
-the implementation must be non-blocking buzzer API.  
+The implementation must be a non-blocking buzzer API.  
 Avoid long delay() calls for audio.  
   
-During g start up the buzzer will play a startup tune, and when user selects Power Off it will play another tune.   
+During start up the buzzer will play a startup tune, and when user selects Power Off it will play another tune.   
 ⸻  
   
 ## Display  
@@ -168,11 +170,13 @@ The selected screen should update efficiently without unnecessarily redrawing th
 ⸻  
   
 ## Start Up  
-When the device is powered up, display a starting screen and play a short start up tune. Something like: [https://photos.app.goo.gl/19hvM5sBXp1vhVhf7] 
+> **Note on mockup images:** Several sections below reference image mockups (`Attachments/*.heic`) that were pulled in from a personal notes app and were never committed to this repository. The paths do not resolve on GitHub and are not viewable by Copilot. Treat the surrounding text description as the source of truth for each screen's layout; if the visual mockups are still needed, add the actual image files under `docs/mockups/` and update the links to point there.
+
+When the device is powered up, display a starting screen and play a short start up tune. Something like: [Startup tune reference](https://photos.app.goo.gl/19hvM5sBXp1vhVhf7)
   
 After that the screen should prominently show:  
 * Logo:   
-!(Attachments/DD5038B5-119A-4907-BD9F-4833688728EE.heic)  
+![Startup screen logo mockup (not committed to repo — see note above)](Attachments/DD5038B5-119A-4907-BD9F-4833688728EE.heic)  
   
 * “Variometer” plus firmware version (x.y.z)  
 * GPS Satellites   
@@ -187,11 +191,11 @@ Once the minimum of satellites has been acquired the text should change to “De
 ## Pre-takeoff  
 This screen should show   
 * current GPS long & latitude   
-* MS6511 altitude  
+* MS5611 altitude  
 * Date & time  
 * A “Ready” instructions, like the screen below   
   
-!(Attachments/7C4B012A-2372-4CD1-AFAC-C5A64305F031.heic)  
+![Pre-takeoff screen mockup (not committed to repo)](Attachments/7C4B012A-2372-4CD1-AFAC-C5A64305F031.heic)  
   
   
 From this screen the rotary encoder allows user to cycle between:  
@@ -228,7 +232,7 @@ From the Power Off screen the user can user rotary encoder to cycle between:
 The application must automatically detect takeoff.  
 When takeoff is detected or user initiated (by pressing encoder button while in this screen):  
 * Play takeoff tune  
-* Play takeoff hepatic sequence   
+* Play takeoff haptic sequence   
 * Save the takeoff GPS latitude  
 * Save the takeoff GPS longitude  
 * Save the takeoff altitude  
@@ -282,27 +286,28 @@ Selecting Back, the default, via the encoder button press displays “Are you su
   
 ## Flight Data  
 Create a central flight-data model containing the current flight state.  
-The data model should include at least:  
-latitude
-longitude
-gpsAltitude
-barometricAltitude
-relativeAltitude
-verticalSpeed
-groundSpeed
-track
-satellites
-gpsFix
-batteryVoltage
-batteryPercent
-flightDuration
-distanceFromLZ
-windSpeed
-windDirection
-windConfidence
-flightState
+The data model should include at least (units in parentheses):  
+latitude (decimal degrees)
+longitude (decimal degrees)
+gpsAltitude (m)
+barometricAltitude (m)
+relativeAltitude (m, relative to LZ/takeoff altitude)
+verticalSpeed (m/s, filtered)
+groundSpeed (km/h)
+track (degrees, 0-359, GPS course over ground)
+satellites (count)
+gpsFix (fix status/quality)
+batteryVoltage (V)
+batteryPercent (0-100)
+flightDuration (s or ms since takeoff)
+distanceFromLZ (km)
+windSpeed (m/s)
+windDirection (degrees, 0-359)
+windConfidence (0-100%)
+flightState (see FlightState enum)
 
 
+Every field's unit must match the units used where that field is displayed (see Header/Footer and per-screen sections below) so no silent unit-conversion bugs creep in between the data model and the UI.  
 Use appropriate types and avoid unnecessary floating-point calculations where integer/fixed-point representations are more appropriate.  
 However, favour clarity over premature optimisation.  
 The system should try to calculate wind speed & direction always not just when the WindDirectionScreen is active.   
@@ -373,7 +378,7 @@ From the this screen the user can cycle between:
   
 This display should look something like:  
   
-!(Attachments/EE270924-BAFE-42E9-9294-B9F8298B9397.heic)  
+![Altitude trace screen mockup (not committed to repo)](Attachments/EE270924-BAFE-42E9-9294-B9F8298B9397.heic)  
   
 ⸻  
   
@@ -381,8 +386,14 @@ This display should look something like:
 ## Variometer Screen  
 This screen has a prominent Altitude display, under which should be Vario and Speed.   
   
-An example of how the screen show look is below, except Flugzeit should be Speed (km/s).    
-!(Attachments/A271C36D-A137-4EF9-B07D-C55C78D6226D.heic)  
+An example of how the screen should look is below, except Flugzeit should be Speed (km/h).    
+![Variometer screen mockup (not committed to repo)](Attachments/A271C36D-A137-4EF9-B07D-C55C78D6226D.heic)  
+  
+From this screen the user can cycle between:  
+1. Wind Direction  
+2. Flight Map  
+3. Altitude Trace  
+4. Variometer  
   
 ⸻ 
 
@@ -396,7 +407,7 @@ From the this screen the user can cycle between:
 ### Wind Direction  
 This screen will have a circle, within the circle is an arrow representing the relative wind direction. See example screen below.   
   
-!(Attachments/5336BB6B-196D-44EA-8FBC-19FDB95ACA1F.heic)  
+![Wind direction screen mockup (not committed to repo)](Attachments/5336BB6B-196D-44EA-8FBC-19FDB95ACA1F.heic)  
   
 If the wind direction is not know or low confidence, the arrow will not be shown.   
   
@@ -418,6 +429,7 @@ Wind confidence should increase when enough reliable data has been collected.
 Confidence should decrease when the estimate becomes unreliable or insufficient.  
 The wind arrow should become larger/more prominent as confidence increases.  
 When confidence is low, clearly indicate that the wind estimate is uncertain.  
+This spec intentionally does not fix numeric confidence bands, sample counts, or arrow-size scaling — that is an implementation decision for `WindEstimator`. Whatever thresholds are chosen, define them as named constants (not inline magic numbers) and document them in code comments.  
   
 The wind speed should be displayed as a x.x value, ideally inside the arrow.   
    
@@ -518,7 +530,7 @@ After the diagnostic data list the changeable data, pushing the encoder button a
 * Altitude Trace (mins)  
 * Initial flight screen  
 * Audio vario feedback
-* Hepatic vario feedback   
+* Haptic vario feedback   
 Rotating the encoder moves between the settings by showing a > to the left of the setting.   
 Pressing the encoder button exists the change settings and reverts to the Settings screen.   
 Long press the encoder button allows the value to be changed. Long press again save the value and reverts to cycling between changeable settings.   
@@ -528,7 +540,7 @@ When a value is changeable the value flashes at 1hz.
 * The Alt trace length can be adjusted from 5 to 240 mins  
 * The Initial flight screen can be: Vario, Wind, Alt  
 * The audio option is on or off  
-* The hepatic option is on or off  
+* The haptic option is on or off  
   
 ⸻  
   
@@ -604,6 +616,8 @@ src/
 
 
 Adapt this structure if a better architecture is clearly justified, but preserve the separation of concerns.  
+
+> **Status:** As of this writing, `display/FlightMapScreen.*` and `utils/GeoUtils.*` / `utils/Filters.h` shown above are not yet present in `src/`. Before implementing distance-to-LZ or map-related work, check whether that logic already exists elsewhere (e.g. inline in another module) rather than assuming `GeoUtils` exists — consolidate it into `GeoUtils` if it's duplicated.
   
 ⸻  
   
@@ -735,7 +749,7 @@ Use:
 Wire.begin(I2C_SDA, I2C_SCL);
 
 
-or the appropriate XIAO ESP32S3 pin definitions.  
+or the appropriate XIAO ESP32C3 pin definitions.  
 Do not independently initialise Wire in each device class.  
 All I2C devices must share the same bus instance.  
 Handle I2C errors gracefully.  
@@ -756,6 +770,11 @@ namespace Config
 
     constexpr int BATTERY_PIN = A1;
     constexpr int BUZZER_PIN = D0;
+    constexpr int HAPTIC_PIN = D2;
+
+    constexpr float BATTERY_DIVIDER_RATIO = 2.0f;
+    constexpr float BATTERY_MIN_VOLTAGE = 3.3f;
+    constexpr float BATTERY_MAX_VOLTAGE = 4.2f;
 
     constexpr uint32_t POWER_OFF_HOLD_MS = 2000;
 
@@ -766,7 +785,7 @@ namespace Config
 }
 
 
-Actual pin constants should use the correct PlatformIO/Arduino definitions for the XIAO ESP32S3.  
+Actual pin constants should use the correct PlatformIO/Arduino definitions for the XIAO ESP32C3.  
 Do not duplicate hardware pin numbers throughout the project.  
   
 ⸻  
@@ -780,7 +799,7 @@ Known required functionality:
 * GPS/NMEA parsing  
 Do not introduce unnecessary libraries.  
 For the DuPPA encoder specifically, use:  
-++[https://github.com/DuPPadotnet/ArduinoDuPPaLib]++ 
+[ArduinoDuPPaLib](https://github.com/DuPPadotnet/ArduinoDuPPaLib)
 
 ⸻  
   
@@ -879,6 +898,29 @@ Improve:
 * Performance  
   
 ⸻  
+
+## Known Regressions — Do Not Reintroduce  
+The following changes were tried, caused a real regression, and were reverted (see commit `5c0a98f`, "undone most Claude", which rolled back parts of `170d5cf`). Do not reapply them without also fixing the root cause described.
+
+### PREFLIGHT screen-cycle array must contain `StartUp`, not `PreTakeoff`  
+`DisplayManager::handleEncoderDelta()` picks a `preflightOrder[]` array to cycle through while `currentFlightState_ == FlightState::PREFLIGHT`. It was once changed from `{StartUp, Settings, PowerOff}` to `{PreTakeoff, Settings, PowerOff}` to better match the screen names used elsewhere in this document. That change froze the UI on the StartUp screen:  
+* Any encoder rotation sets `manualSelectionActive_ = true` — even while still on the StartUp screen, before GPS lock.  
+* `updateScreenSelection()` only performs the automatic StartUp → PreTakeoff transition (on GPS lock) when `manualSelectionActive_` is false.  
+* With `PreTakeoff` in the array instead of `StartUp`, rotating the encoder while on the StartUp screen matches nothing, so the manual cycle silently does nothing — and `manualSelectionActive_` is now stuck `true`, so the automatic transition never fires either. The device is stuck on the StartUp screen permanently, with no manual or automatic way off it.  
+If `PreTakeoff` needs to replace `StartUp` in this array again, first fix the underlying cause — e.g. ignore encoder rotation while `activeScreen_ == ScreenId::StartUp`, or don't let a rotation on that screen set `manualSelectionActive_`, or clear `manualSelectionActive_` when the automatic state-driven transition happens. Verify by rotating the encoder once while still waiting for GPS lock, then confirming the screen still auto-advances to Pre-takeoff once lock is acquired.
+
+### MS5611 pressure formula: the final `>>15` applies to the whole expression, not just `OFF`  
+Per the MS5611 datasheet, `P = (D1*SENS/2^21 - OFF) / 2^15` — the `>>15` must be applied after subtracting `OFF`, not only to `OFF` on its own. A change once rewrote this in `MS5611Sensor.cpp` as:  
+```
+(((raw * SENS) >> 21)) - (OFF >> 15)
+```  
+which produces incorrect pressure/altitude values. The correct form, restored by the same revert, is:  
+```
+(((raw * SENS) >> 21) - OFF) >> 15
+```  
+Keep the comment explaining this next to the code — it's exactly the kind of thing that looks like a harmless refactor.
+
+⸻  
   
 ## Important Development Rule  
 Before modifying an existing file, inspect the existing project.  
@@ -915,12 +957,12 @@ When a feature requires a hardware capability that has not yet been specified, c
   
 ## Definition of Done  
 The firmware is considered complete when:  
-* The ESP32S3 boots reliably.  
+* The ESP32C3 boots reliably.  
 * All three I2C devices initialise correctly.  
 * GPS communicates correctly.  
 * Battery voltage is measured.  
 * Buzzer operates.  
-* Heptic motor operates.
+* Haptic motor operates.
 * Encoder rotates through screens.  
 * Encoder button works.  
 * Long encoder press enters Power Off.  
