@@ -13,14 +13,22 @@ constexpr uint8_t kAddressSecondary = 0x77;
 
 constexpr uint8_t kResetCommand = 0x1E;
 
-// MS5611 PROM calibration coefficients:
-// C1 = 0xA2
-// C2 = 0xA4
-// C3 = 0xA6
-// C4 = 0xA8
-// C5 = 0xAA
-// C6 = 0xAC
-constexpr uint8_t kPromBase = 0xA2;
+/*
+ * MS5611 PROM: eight 16-bit words, read from 0xA0 upwards.
+ *
+ *   0xA0  factory data
+ *   0xA2  C1        0xA4  C2        0xA6  C3
+ *   0xA8  C4        0xAA  C5        0xAC  C6
+ *   0xAE  serial code; low 4 bits are the CRC
+ *
+ * The base is 0xA0, NOT 0xA2. Basing the read at the first coefficient
+ * shifts every word one slot down (promWords_[1] holds C2 rather than
+ * C1) and runs one word off the end of the PROM at 0xB0, which is not a
+ * valid address. That yields a nonsense pressure, which then fails the
+ * range check, so the sensor silently stops producing samples entirely.
+ */
+constexpr uint8_t kPromBase = 0xA0;
+constexpr int kPromWordCount = 8;
 constexpr uint8_t kReadAdc = 0x00;
 
 // OSR 4096.
@@ -140,7 +148,7 @@ uint32_t MS5611Sensor::readAdc() {
 
 bool MS5611Sensor::readProm() {
     // Read all eight words (0xA0..0xAE) so the CRC nibble is available.
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < kPromWordCount; ++i) {
         const uint8_t address =
             static_cast<uint8_t>(kPromBase + (i * 2));
 
@@ -314,15 +322,14 @@ void MS5611Sensor::update() {
 
     switch (state_) {
 
-        case State::WaitingPressure:
+        case State::WaitingPressure: {
 
             if (now - lastTransitionMs_ < kConversionTimeMs) {
                 return;
             }
 
-        {
             // Keep the previous good value if this read fails, so the
-            // diagnostics above still show the last real measurement.
+            // diagnostics still show the last real measurement.
             const uint32_t rawPressure = readAdc();
 
             if (rawPressure == 0) {
@@ -335,8 +342,6 @@ void MS5611Sensor::update() {
             }
 
             pressureRaw_ = rawPressure;
-        }
-            //DBGLN("MS5611: pressure ADC read successful");
 
             // Immediately start temperature conversion.
             requestConversion(kConvertD2);
@@ -345,15 +350,15 @@ void MS5611Sensor::update() {
             state_ = State::WaitingTemperature;
 
             break;
+        }
 
 
-        case State::WaitingTemperature:
+        case State::WaitingTemperature: {
 
             if (now - lastTransitionMs_ < kConversionTimeMs) {
                 return;
             }
 
-        {
             const uint32_t rawTemperature = readAdc();
 
             if (rawTemperature == 0) {
@@ -366,8 +371,6 @@ void MS5611Sensor::update() {
             }
 
             temperatureRaw_ = rawTemperature;
-        }
-            //DBGLN("MS5611: temperature ADC read successful");
 
             processMeasurements();
 
@@ -378,6 +381,7 @@ void MS5611Sensor::update() {
             state_ = State::WaitingPressure;
 
             break;
+        }
     }
 }
 
