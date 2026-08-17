@@ -28,10 +28,13 @@ void Application::begin() {
      * where a single full 128x128 OLED refresh takes ~184 ms and starves
      * every other subsystem in loop(). See Config::I2C_CLOCK_HZ.
      */
-    Wire.setClock(Config::I2C_CLOCK_HZ);
+    // Sensors are the default; the display raises the clock briefly for
+    // its own flush and restores this afterwards.
+    Wire.setClock(Config::I2C_CLOCK_SENSORS_HZ);
 
-    DBGF("I2C bus configured at %lu Hz\n",
-         static_cast<unsigned long>(Config::I2C_CLOCK_HZ));
+    DBGF("I2C configured: sensors %lu Hz, display %lu Hz\n",
+         static_cast<unsigned long>(Config::I2C_CLOCK_SENSORS_HZ),
+         static_cast<unsigned long>(Config::I2C_CLOCK_DISPLAY_HZ));
 
     // Enumerate the bus before any driver touches it, so a device that
     // is absent or marginal at this clock speed shows up immediately.
@@ -61,7 +64,13 @@ void Application::scanI2cBus() {
 
     DBGLN("I2C scan:");
 
-    for (uint8_t address = 0x08; address <= 0x77; ++address) {
+    /*
+     * Starts at 0x01, not the usual 0x08. Addresses below 0x08 are
+     * reserved by the I2C spec, but the DuPPa encoder is configured to
+     * one of them here (Config::ENCODER_I2C_ADDRESS), so a scan over the
+     * conventional range would report it missing when it is present.
+     */
+    for (uint8_t address = 0x01; address <= 0x77; ++address) {
         Wire.beginTransmission(address);
 
         if (Wire.endTransmission() == 0) {
@@ -81,6 +90,25 @@ void Application::scanI2cBus() {
     }
 
     DBGF("I2C scan complete, %u device(s) responding\n", found);
+}
+
+void Application::noteAltitudeSample(float altitude) {
+    ++altitudeSampleCount_;
+
+    if (!altitudeSpreadValid_) {
+        altitudeMin_ = altitude;
+        altitudeMax_ = altitude;
+        altitudeSpreadValid_ = true;
+        return;
+    }
+
+    if (altitude < altitudeMin_) {
+        altitudeMin_ = altitude;
+    }
+
+    if (altitude > altitudeMax_) {
+        altitudeMax_ = altitude;
+    }
 }
 
 void Application::reportHealth() {
@@ -108,8 +136,8 @@ void Application::reportHealth() {
      *   alt   -- what rate is the vario actually being fed at
      */
     DBGF("HEALTH: loop=%luHz avg=%luus max=%luus | disp=%luHz avg=%luus max=%luus | "
-         "baro=%.1f/s ok=%lu pFail=%lu tFail=%lu cmdFail=%lu rdFail=%lu rng=%lu i2cErr=%u crc=%s | "
-         "alt=%.1f/s vario=%.2fm/s heap=%lu\n",
+         "baro=%.1f/s ok=%lu pFail=%lu tFail=%lu cmdFail=%lu rdFail=%lu rng=%lu tRej=%lu "
+         "i2cErr=%u crc=%s | alt=%.1f/s spread=%.2fm vario=%.2fm/s heap=%lu\n",
          static_cast<unsigned long>(loopCount_ / (seconds > 0 ? seconds : 1)),
          static_cast<unsigned long>(loopAvgUs),
          static_cast<unsigned long>(loopMaxUs_),
@@ -123,9 +151,11 @@ void Application::reportHealth() {
          static_cast<unsigned long>(baro.convertFail),
          static_cast<unsigned long>(baro.readFail),
          static_cast<unsigned long>(baro.rangeReject),
+         static_cast<unsigned long>(baro.tempReject),
          ms5611_.getLastI2cError(),
          ms5611_.hasValidPromCrc() ? "OK" : "BAD",
          static_cast<double>(altitudeSampleCount_) / seconds,
+         static_cast<double>(altitudeSpreadValid_ ? (altitudeMax_ - altitudeMin_) : 0.0f),
          flightData_.verticalSpeed,
          static_cast<unsigned long>(ESP.getFreeHeap()));
 
@@ -138,6 +168,7 @@ void Application::reportHealth() {
     displayMaxUs_ = 0;
     displaySumUs_ = 0;
     altitudeSampleCount_ = 0;
+    altitudeSpreadValid_ = false;
     lastHealthMs_ = millis();
 }
 
@@ -195,7 +226,16 @@ void Application::loop() {
         // suspect whenever the loop rate collapses.
         const uint32_t displayStartUs = micros();
 
+        /*
+         * The OLED is the one device that needs a fast bus, and it is
+         * tolerant of it. Raise the clock for the flush only, then hand
+         * the bus back to the sensors at their safe speed.
+         */
+        Wire.setClock(Config::I2C_CLOCK_DISPLAY_HZ);
+
         updateDisplay();
+
+        Wire.setClock(Config::I2C_CLOCK_SENSORS_HZ);
 
         const uint32_t displayUs = micros() - displayStartUs;
 
@@ -326,7 +366,7 @@ void Application::updateSensors() {
             // the new sample just as the barometer would.
             altitudeSampleTimeMs_ = now;
             ++altitudeSampleSeq_;
-            ++altitudeSampleCount_;
+            noteAltitudeSample(flightData_.barometricAltitude);
      }
 
 
@@ -348,7 +388,7 @@ void Application::updateSensors() {
             lastMs5611Seq_ = sensorSeq;
             altitudeSampleTimeMs_ = ms5611_.getSampleTimeMs();
             ++altitudeSampleSeq_;
-            ++altitudeSampleCount_;
+            noteAltitudeSample(flightData_.barometricAltitude);
         }
     }
 

@@ -84,6 +84,7 @@ private:
      * gates expect, something is still blocking the loop.
      */
     void reportHealth();
+    void noteAltitudeSample(float altitude);
 
     uint32_t lastHealthMs_ = 0;
     uint32_t loopCount_ = 0;
@@ -93,6 +94,19 @@ private:
     uint32_t displayMaxUs_ = 0;
     uint32_t displaySumUs_ = 0;
     uint32_t altitudeSampleCount_ = 0;
+
+    /*
+     * Altitude spread over the reporting interval.
+     *
+     * With the device stationary this is a direct measurement of sensor
+     * noise, and it settles the main open question cheaply: an MS5611 at
+     * OSR 4096 should hold roughly 0.1-0.3 m peak-to-peak. Metres of
+     * spread means the problem is upstream of the vario maths, and no
+     * amount of filter tuning will fix it.
+     */
+    float altitudeMin_ = 0.0f;
+    float altitudeMax_ = 0.0f;
+    bool altitudeSpreadValid_ = false;
 
     // Scans the shared bus once at startup and lists responding
     // addresses, so a missing or intermittent device is obvious.

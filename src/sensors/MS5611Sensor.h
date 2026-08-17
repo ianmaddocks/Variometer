@@ -65,6 +65,7 @@ public:
         uint32_t convertFail;     // convert command not delivered
         uint32_t readFail;        // ADC read transaction itself failed
         uint32_t rangeReject;     // computed value outside sane limits
+        uint32_t tempReject;      // D2 corrupt: temperature implausible
     };
 
     const Counters& getCounters() const;

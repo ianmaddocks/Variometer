@@ -67,6 +67,9 @@ private:
     // real elapsed time so the smoothing is independent of sample rate.
     uint32_t lastFilterTimeMs_ = 0;
     bool filterPrimed_ = false;
+
+    // Counts accepted samples for Config::VARIO_TRACE_DECIMATION.
+    uint8_t traceCounter_ = 0;
 };
 
 }  // namespace variometer

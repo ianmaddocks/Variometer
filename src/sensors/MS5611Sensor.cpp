@@ -29,6 +29,21 @@ constexpr uint8_t kResetCommand = 0x1E;
  */
 constexpr uint8_t kPromBase = 0xA0;
 constexpr int kPromWordCount = 8;
+
+// Attempts allowed for a CRC-valid PROM read before giving up.
+constexpr int kPromReadAttempts = 5;
+
+/*
+ * Plausibility limits for the computed temperature, in 0.01 C.
+ *
+ * The MS5611's specified operating range is -40..+85 C. A value outside
+ * it means the D2 conversion was corrupted on the bus, and since D2
+ * feeds OFF and SENS as well as TEMP, that corruption moves the computed
+ * altitude by kilometres. Rejecting the sample here is what stops those
+ * jumps reaching the vario.
+ */
+constexpr int64_t kTempMinValid = -4500;
+constexpr int64_t kTempMaxValid = 9000;
 constexpr uint8_t kReadAdc = 0x00;
 
 // OSR 4096.
@@ -271,22 +286,52 @@ void MS5611Sensor::begin() {
     // Datasheet specifies ~2.8ms reset time; use a safety margin.
     delay(10);
 
-    // Read C1..C6.
-    if (!readProm()) {
-        DBGLN("MS5611: PROM read failed");
-        return;
+    /*
+     * Read the calibration PROM, retrying until the CRC passes.
+     *
+     * A single corrupted read poisons every subsequent pressure and
+     * altitude for the whole session, so it is well worth a few extra
+     * attempts here. Observed corruption returned 0xFF in the low byte
+     * of each word (C1 == C2, C3 == C4), which the CRC catches.
+     */
+    bool promOk = false;
+
+    for (int attempt = 1; attempt <= kPromReadAttempts; ++attempt) {
+        if (readProm() && promCrcValid_) {
+            promOk = true;
+
+            if (attempt > 1) {
+                DBGF("MS5611: PROM read succeeded on attempt %d\n", attempt);
+            }
+            break;
+        }
+
+        DBGF("MS5611: PROM attempt %d/%d failed\n", attempt, kPromReadAttempts);
+        delay(5);
     }
 
     DBGF(
         "MS5611 PROM: C1=%u C2=%u C3=%u C4=%u C5=%u C6=%u (word0=0x%04X word7=0x%04X)\n",
-        promWords_[1],
-        promWords_[2],
-        promWords_[3],
-        promWords_[4],
-        promWords_[5],
-        promWords_[6],
-        promWords_[0],
-        promWords_[7]);
+        promWords_[1], promWords_[2], promWords_[3],
+        promWords_[4], promWords_[5], promWords_[6],
+        promWords_[0], promWords_[7]);
+
+    if (!promOk) {
+        /*
+         * Refuse to run rather than publish plausible-looking nonsense.
+         *
+         * Without trustworthy coefficients the computed altitude is
+         * meaningless, and a meaningless altitude is worse than a
+         * reported sensor failure -- it feeds the vario, the flight
+         * detector and the trace. The project's error-handling rule is
+         * explicit: indicate the failure, do not use invalid values.
+         */
+        DBGLN("MS5611: PROM CRC never validated -- sensor marked FAILED, "
+              "altitude/vario unavailable. This is an I2C integrity problem "
+              "(pull-ups, wiring, bus speed), not a calculation error.");
+        valid_ = false;
+        return;
+    }
 
     valid_ = true;
 
@@ -408,6 +453,22 @@ void MS5611Sensor::processMeasurements() {
     int64_t TEMP =
         2000 +
         ((dT * static_cast<int64_t>(promWords_[6])) >> 23);
+
+    /*
+     * Reject a corrupted temperature conversion before it reaches the
+     * pressure maths.
+     *
+     * D2 feeds dT, which feeds OFF and SENS as well as TEMP, so a bad D2
+     * does not merely show a silly temperature -- it shifts the computed
+     * altitude by kilometres. Observed corruption produced D2 = 0xBFFFFF
+     * and TEMP = 172 C, which moved the reported altitude by ~2000 m
+     * between consecutive samples. Catching it here keeps that step out
+     * of the vario entirely.
+     */
+    if (TEMP < kTempMinValid || TEMP > kTempMaxValid) {
+        ++counters_.tempReject;
+        return;
+    }
 
     int64_t OFF =
         (static_cast<int64_t>(promWords_[2]) << 16) +

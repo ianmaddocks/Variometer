@@ -6,7 +6,12 @@
 namespace variometer {
 
 void Encoder::begin() {
-    Wire.begin();
+    /*
+     * Deliberately does NOT call Wire.begin(). Application owns the bus
+     * and has already configured pins and clock; a bare Wire.begin()
+     * here re-initialises the peripheral with default pins and resets
+     * the clock, silently undoing that configuration.
+     */
     encoder_ = new i2cEncoderLibV2(Config::ENCODER_I2C_ADDRESS);
     encoder_->begin(i2cEncoderLibV2::INT_DATA   | i2cEncoderLibV2::WRAP_DISABLE |
                     i2cEncoderLibV2::DIRE_RIGHT | i2cEncoderLibV2::IPUP_ENABLE |

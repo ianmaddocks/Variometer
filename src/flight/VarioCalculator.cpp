@@ -255,6 +255,29 @@ void VarioCalculator::update(const FlightData& data,
     }
 
     /*
+     * Per-sample trace. Compiled out entirely when disabled.
+     *
+     * n/span expose how much data the slope was actually derived from --
+     * a slope computed from the minimum 3 samples over a short baseline
+     * is far noisier than one over a full window, and that difference is
+     * invisible in the filtered output alone.
+     */
+    if (Config::VARIO_TRACE_ENABLED) {
+        if (++traceCounter_ >= Config::VARIO_TRACE_DECIMATION) {
+            traceCounter_ = 0;
+
+            DBGF("VTRACE t=%lu alt=%.2f raw=%.2f filt=%.2f n=%lu span=%lums dt=%lums\n",
+                 static_cast<unsigned long>(newest.timeMs),
+                 static_cast<double>(newest.altitude),
+                 static_cast<double>(rawVerticalSpeed_),
+                 static_cast<double>(verticalSpeed_),
+                 static_cast<unsigned long>(sampleCount),
+                 static_cast<unsigned long>(spanMs),
+                 static_cast<unsigned long>(dtMs));
+        }
+    }
+
+    /*
      * Do NOT use the display limits here.
      *
      * Keep the actual calculated value available to the audio

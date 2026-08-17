@@ -40,6 +40,29 @@ constexpr int I2C_SCL = D10;
  * bus: MS5611, SH1107 and the DuPPa encoder.
  */
 constexpr uint32_t I2C_CLOCK_HZ = 400000;
+
+/*
+ * Per-device bus speeds.
+ *
+ * These two devices want opposite things, so the bus is re-clocked
+ * around the display flush rather than run at one compromise speed.
+ *
+ * The MS5611 proved unreliable at 400 kHz on this wiring: address NACKs
+ * (Wire error 2) on conversion commands, and multi-byte reads returning
+ * 0xFF in the low bytes -- which corrupted both the calibration PROM and
+ * the D2 temperature conversion. A corrupt D2 swings the computed
+ * altitude by ~2000 m, which no amount of vario filtering can hide.
+ *
+ * The SH1107 pushes 2048 bytes per refresh and is the only device that
+ * genuinely needs the speed, so it keeps 400 kHz. setClock() only
+ * rewrites the peripheral's timing registers and is cheap enough to do
+ * ~10 times a second.
+ *
+ * If the sensor is still unreliable at 100 kHz the fault is electrical
+ * (pull-ups, wire length, supply decoupling), not timing.
+ */
+constexpr uint32_t I2C_CLOCK_SENSORS_HZ = 100000;
+constexpr uint32_t I2C_CLOCK_DISPLAY_HZ = 400000;
 constexpr int GPS_RX = D8;
 constexpr int GPS_TX = D7;
 constexpr uint32_t GPS_BAUD = 115200;
@@ -99,6 +122,27 @@ constexpr uint32_t MS5611_DEBUG_INTERVAL_MS = 5000;
  * very loop timing being measured.
  */
 constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 5000;
+
+/*
+ * Per-sample vario trace.
+ *
+ * The HEALTH line reports rates, which cannot show *why* a reading is
+ * erratic. This logs each accepted sample so the altitude signal and the
+ * derived slope can be inspected directly, which separates the two
+ * candidate causes:
+ *
+ *   alt jumps around        -> the sensor or bus is the problem
+ *   alt smooth, raw swings  -> the regression or its timing is
+ *
+ * Off by default: at ~25 Hz this is far too much serial traffic to run
+ * continuously, and the writes themselves would perturb loop timing.
+ * Enable deliberately for a short bench capture, ideally with the device
+ * stationary, then turn it back off.
+ */
+constexpr bool VARIO_TRACE_ENABLED = false;
+
+// Log only every Nth accepted sample. 1 = every sample.
+constexpr uint8_t VARIO_TRACE_DECIMATION = 2;
 constexpr float VARIO_MAX_CLIMB = 5.0f;
 constexpr float VARIO_MAX_SINK = -5.0f;
 
