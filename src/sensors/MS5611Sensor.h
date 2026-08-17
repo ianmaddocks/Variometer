@@ -1,6 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
+//#define USE_MOCK_MS5611 1
+#ifdef USE_MOCK_MS5611
+#include "MockMS5611.h"
+#endif
 
 namespace variometer {
 
@@ -56,6 +60,9 @@ private:
     bool referenceSet_ = false;
 
     uint8_t address_ = 0x76;
+#ifdef USE_MOCK_MS5611
+    MockMS5611 mockMS5611_;
+#endif
 };
 
 }  // namespace variometer

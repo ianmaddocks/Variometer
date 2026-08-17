@@ -4,7 +4,6 @@
 
 #define VARIOMETER_VERSION "v0.0.1"
 
-
 #if defined(DEBUG) || !defined(NDEBUG)
   // DBG continues the current line (no timestamp); DBGLN/DBGF start a new line and are timestamped.
   #define DBG(...) do { Serial.printf("[%lu] ", millis()); Serial.print(__VA_ARGS__); } while (0)

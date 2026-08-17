@@ -61,14 +61,22 @@ uint32_t MS5611Sensor::readAdc() {
         return 0;
     }
 
+#ifdef USE_MOCK_MS5611
+    //DBG( "Read ADC successfully\n");
+    uint8_t b0, b1, b2;
+    mockMS5611_.readADC(b0, b1, b2);
+    const uint32_t rv = (static_cast<uint32_t>(b0) << 16) |
+                        (static_cast<uint32_t>(b1) << 8) |
+                        (static_cast<uint32_t>(b2));
+#else
     const uint8_t b0 = Wire.read();
     const uint8_t b1 = Wire.read();
     const uint8_t b2 = Wire.read();
-    //DBG( "Read ADC successfully\n");
+    const uint32_t rv = (static_cast<uint32_t>(b0) << 16) |
+                        (static_cast<uint32_t>(b1) << 8) |
+                        (static_cast<uint32_t>(b2));
+#endif
 
-    uint32_t rv = (static_cast<uint32_t>(b0) << 16) |
-                  (static_cast<uint32_t>(b1) << 8) |
-                  (static_cast<uint32_t>(b2));
     if (rv == 0) {
         DBGLN("MS5611: ADC read returned zero");
         DBGF("MS5611: ADC bytes: %02X %02X %02X\n", b0, b1, b2);
