@@ -78,6 +78,13 @@ private:
     // Last MS5611 sequence seen, used to detect a fresh barometer sample.
     uint32_t lastMs5611Seq_ = 0;
 
+#ifdef ALTITUDE_SOURCE_GPS
+    // Only used when altitude is sourced from GPS; see updateSensors().
+    uint32_t lastGpsAltitudeSeq_ = 0;
+    float gpsAltitudeReference_ = 0.0f;
+    bool gpsAltitudeReferenceSet_ = false;
+#endif
+
     /*
      * Health / timing instrumentation.
      *

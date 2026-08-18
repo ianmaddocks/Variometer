@@ -53,6 +53,8 @@ void GPS::begin() {
     track_ = 0.0f;
     satellites_ = 0;
     fix_ = false;
+    altitudeSampleSeq_ = 0;
+    altitudeSampleTimeMs_ = 0;
     utcDateTime_ = DateTime{};
     mockEnabled_ = false;
     mockStartMs_ = 0;
@@ -107,6 +109,11 @@ void GPS::feedSerialSentence(const String& sentence) {
             const float altitude = fields[9].toFloat();
             if (!isnan(altitude) && altitude > -1000.0f) {
                 altitude_ = altitude;
+
+                // A GGA sentence is the sole source of GPS altitude, so
+                // this is exactly "a new altitude sample arrived".
+                altitudeSampleTimeMs_ = millis();
+                ++altitudeSampleSeq_;
             }
             hasData_ = true;
         }
@@ -200,6 +207,8 @@ bool GPS::hasData() const { return hasData_; }
 float GPS::getLatitude() const { return latitude_; }
 float GPS::getLongitude() const { return longitude_; }
 float GPS::getAltitude() const { return altitude_; }
+uint32_t GPS::getAltitudeSampleSequence() const { return altitudeSampleSeq_; }
+uint32_t GPS::getAltitudeSampleTimeMs() const { return altitudeSampleTimeMs_; }
 float GPS::getGroundSpeed() const { return groundSpeed_; }
 float GPS::getTrack() const { return track_; }
 uint8_t GPS::getSatellites() const { return satellites_; }

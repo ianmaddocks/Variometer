@@ -373,6 +373,45 @@ void Application::updateSensors() {
      }
 
 
+#ifdef ALTITUDE_SOURCE_GPS
+    /*
+     * Altitude/vario sourced from the GPS's own GGA fix instead of the
+     * MS5611.
+     *
+     * Selected at compile time via Config::ALTITUDE_SOURCE_GPS (see
+     * platformio.ini) so the rest of the flight logic -- vario filter,
+     * flight detection, the map, the altitude trace -- can be exercised
+     * without a working barometer. This is a bench/debug aid, not a
+     * flight configuration: GPS altitude is materially noisier and
+     * slower than a barometer (see the warning at Config.h), and this
+     * path is only ever compiled in deliberately, never chosen at
+     * runtime, so there is no risk of silently flying on it.
+     */
+    } else if (gps_.hasData()) {
+        // Mirrors MS5611Sensor's own behaviour: establish a reference on
+        // the first valid reading so relativeAltitude reads sensibly
+        // during preflight, before setTakeoffReference()'s equivalent
+        // below overwrites it at takeoff.
+        if (!gpsAltitudeReferenceSet_) {
+            gpsAltitudeReference_ = gps_.getAltitude();
+            gpsAltitudeReferenceSet_ = true;
+        }
+
+        flightData_.barometricAltitude = gps_.getAltitude();
+        flightData_.relativeAltitude =
+            gps_.getAltitude() - gpsAltitudeReference_;
+
+        // Same handshake pattern as the MS5611 path below: only feed the
+        // vario a sample when a new GGA fix has actually arrived.
+        const uint32_t gpsSeq = gps_.getAltitudeSampleSequence();
+
+        if (gpsSeq != lastGpsAltitudeSeq_) {
+            lastGpsAltitudeSeq_ = gpsSeq;
+            altitudeSampleTimeMs_ = gps_.getAltitudeSampleTimeMs();
+            ++altitudeSampleSeq_;
+            noteAltitudeSample(flightData_.barometricAltitude);
+        }
+#else
     } else if (ms5611_.isValid()) {
         flightData_.barometricAltitude = ms5611_.getAltitude();
         flightData_.relativeAltitude = ms5611_.getRelativeAltitude();
@@ -393,6 +432,7 @@ void Application::updateSensors() {
             ++altitudeSampleSeq_;
             noteAltitudeSample(flightData_.barometricAltitude);
         }
+#endif
     }
 
     if ((flightData_.flightState == FlightState::FLIGHT ||
@@ -500,7 +540,11 @@ void Application::initializeFlightSession() {
     }
 
     // Establish zero altitude at takeoff.
+#ifdef ALTITUDE_SOURCE_GPS
+    gpsAltitudeReference_ = gps_.getAltitude();
+#else
     ms5611_.setTakeoffReference();
+#endif
 
     // Discard pre-flight altitude samples so the first
     // flight vario calculation starts cleanly.

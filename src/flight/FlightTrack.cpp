@@ -192,7 +192,9 @@ void FlightTrack::updateDeadReckoning(const FlightData& data,
      * noisier velocity; the receiver's own speed/course solution is
      * filtered internally and is a materially better estimate.
      */
-    const float speedMs = data.groundSpeed / 3.6f;  // km/h -> m/s
+    // FlightData::groundSpeed is already m/s (GPS.cpp converts knots to
+    // m/s on parse); no conversion needed here.
+    const float speedMs = data.groundSpeed;
     const float trackRad = data.track * geo::kDegToRad;
 
     lastGoodEastM_ = eastM;

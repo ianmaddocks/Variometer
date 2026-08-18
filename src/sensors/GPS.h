@@ -25,6 +25,18 @@ public:
     float getLatitude() const;
     float getLongitude() const;
     float getAltitude() const;
+
+    /*
+     * Altitude sample handshake, mirroring MS5611Sensor's. Needed
+     * because GPS altitude can be selected as the vario's altitude
+     * source (see Config::ALTITUDE_SOURCE_GPS), and the vario must be
+     * able to tell a genuinely new GGA fix from a repeat of the last one
+     * -- otherwise it re-derives the same duplicate-sample staircase
+     * problem that the barometer path already had to solve.
+     */
+    uint32_t getAltitudeSampleSequence() const;
+    uint32_t getAltitudeSampleTimeMs() const;
+
     float getGroundSpeed() const;
     float getTrack() const;
     uint8_t getSatellites() const;
@@ -43,6 +55,8 @@ private:
     float track_ = 0.0f;
     uint8_t satellites_ = 0;
     bool fix_ = false;
+    uint32_t altitudeSampleSeq_ = 0;
+    uint32_t altitudeSampleTimeMs_ = 0;
     DateTime utcDateTime_;
     bool mockEnabled_ = false;
     uint32_t mockStartMs_ = 0;

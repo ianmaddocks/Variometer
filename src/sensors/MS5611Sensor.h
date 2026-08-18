@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-//#define USE_MOCK_MS5611 1
+#define USE_MOCK_MS5611 1
 #ifdef USE_MOCK_MS5611
 #include "MockMS5611.h"
 #endif
