@@ -11,6 +11,7 @@
 #include "flight/VarioCalculator.h"
 #include "flight/WindEstimator.h"
 #include "flight/FlightRecorder.h"
+#include "flight/FlightTrack.h"
 #include "flight/FlightLogStorage.h"
 #include "display/DisplayManager.h"
 
@@ -40,6 +41,7 @@ private:
     uint32_t lastAudioMs_ = 0;
     uint32_t lastDisplayMs_ = 0;
     uint32_t lastTraceSampleMs_ = 0;
+    uint32_t lastTrackSampleMs_ = 0;
     uint32_t flightStartTimeMs_ = 0;
     GPS gps_;
     MS5611Sensor ms5611_;
@@ -51,6 +53,7 @@ private:
     VarioCalculator varioCalculator_;
     WindEstimator windEstimator_;
     FlightRecorder flightRecorder_;
+    FlightTrack flightTrack_;
     FlightLogStorage flightLogStorage_;
     DisplayManager display_;
 

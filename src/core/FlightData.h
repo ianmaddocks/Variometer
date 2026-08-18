@@ -21,6 +21,10 @@ struct DeviceSettings {
     bool backgroundWhite = false;
     uint16_t altitudeTraceMinutes = 30;
     uint8_t initialFlightScreen = 0;
+
+    // Playback rate for the post-flight 3D replay, as a multiple of real
+    // time. 3x replays a typical flight in a reviewable length of time.
+    uint8_t replaySpeed = 3;
 };
 
 struct FlightData {

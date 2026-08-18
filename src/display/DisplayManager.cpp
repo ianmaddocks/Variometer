@@ -9,6 +9,7 @@
 #include "display/StartUpScreen.h"
 #include "display/VarioScreen.h"
 #include "display/WindDirectionScreen.h"
+#include "display/FlightMapScreen.h"
 #include "display/PowerOffScreen.h"
 
 namespace variometer {
@@ -84,6 +85,7 @@ DisplayManager::DisplayManager()
       variometerScreen_(new VarioScreen()),
       altitudeTraceScreen_(new AltitudeTraceScreen()),
       windDirectionScreen_(new WindDirectionScreen()),
+      flightMapScreen_(new FlightMapScreen()),
       settingsScreen_(new SettingsScreen()),
       powerOffScreen_(new PowerOffScreen()),
       landedScreen_(new LandedScreen()) {}
@@ -94,6 +96,15 @@ SimpleDisplay& DisplayManager::display() {
 
 FlightRecorder* DisplayManager::recorder() const {
     return recorder_;
+}
+
+void DisplayManager::setTrack(FlightTrack* track) {
+    track_ = track;
+    flightMapScreen_->setTrack(track);
+}
+
+void DisplayManager::setReplaySpeed(uint8_t speed) {
+    flightMapScreen_->setReplaySpeed(speed);
 }
 
 void DisplayManager::begin() {
@@ -116,6 +127,7 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (previous == ScreenId::Variometer) variometerScreen_->exit();
     if (previous == ScreenId::AltitudeTrace) altitudeTraceScreen_->exit();
     if (previous == ScreenId::WindDirection) windDirectionScreen_->exit();
+    if (previous == ScreenId::FlightMap) flightMapScreen_->exit();
     if (previous == ScreenId::Settings) settingsScreen_->exit();
     if (previous == ScreenId::PowerOff) powerOffScreen_->exit();
     if (previous == ScreenId::Landed) landedScreen_->exit();
@@ -125,6 +137,7 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (screen == ScreenId::Variometer) variometerScreen_->enter();
     if (screen == ScreenId::AltitudeTrace) altitudeTraceScreen_->enter();
     if (screen == ScreenId::WindDirection) windDirectionScreen_->enter();
+    if (screen == ScreenId::FlightMap) flightMapScreen_->enter();
     if (screen == ScreenId::Settings) settingsScreen_->enter();
     if (screen == ScreenId::PowerOff) powerOffScreen_->enter();
     if (screen == ScreenId::Landed) landedScreen_->enter();
@@ -211,6 +224,12 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         case ScreenId::WindDirection:
             windDirectionScreen_->draw(*this, data);
             break;
+        case ScreenId::FlightMap:
+            // update() advances the zoom staging and replay clock; both
+            // must run at the display rate, independent of GPS updates.
+            flightMapScreen_->update(data);
+            flightMapScreen_->draw(*this, data);
+            break;
         case ScreenId::Settings:
             settingsScreen_->draw(*this, data);
             break;
@@ -254,6 +273,16 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
         }
     }
 
+    /*
+     * In the 3D replay the encoder orbits the view rather than changing
+     * screen, so the rotation is consumed here. The pilot leaves 3D with
+     * a button press, which keeps one control doing one thing per mode.
+     */
+    if (activeScreen_ == ScreenId::FlightMap && flightMapScreen_->isThreeD()) {
+        flightMapScreen_->rotateView(delta);
+        return;
+    }
+
     manualSelectionActive_ = true;
     lastScreen_ = activeScreen_;
 
@@ -270,8 +299,10 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
             }
         }
     } else if (currentFlightState_ == FlightState::FLIGHT || currentFlightState_ == FlightState::TAKEOFF_DETECTED) {
-        static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::AltitudeTrace, ScreenId::WindDirection, ScreenId::Settings};
-        constexpr int count = 4;
+        static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::WindDirection,
+                                                 ScreenId::FlightMap, ScreenId::AltitudeTrace,
+                                                 ScreenId::Settings};
+        constexpr int count = 5;
         for (int i = 0; i < count; ++i) {
             if (inFlightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -280,8 +311,10 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
             }
         }
     } else if (currentFlightState_ == FlightState::LANDING_DETECTED || currentFlightState_ == FlightState::POST_FLIGHT) {
-        static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::AltitudeTrace, ScreenId::Settings, ScreenId::PowerOff};
-        constexpr int count = 4;
+        static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::FlightMap,
+                                               ScreenId::AltitudeTrace, ScreenId::Settings,
+                                               ScreenId::PowerOff};
+        constexpr int count = 5;
         for (int i = 0; i < count; ++i) {
             if (landedOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -307,6 +340,16 @@ void DisplayManager::handleButtonPress() {
 
     if (activeScreen_ == ScreenId::PowerOff) {
         DBGLN("Power-off screen active: long press required to shutdown");
+        return;
+    }
+
+    /*
+     * On the map, a press switches between the plan view and the
+     * post-flight 3D replay. The screen itself refuses the change while
+     * airborne, so this stays a single unconditional gesture.
+     */
+    if (activeScreen_ == ScreenId::FlightMap) {
+        flightMapScreen_->toggleViewMode(currentFlightState_);
         return;
     }
 

@@ -5,6 +5,7 @@
 #include <Wire.h>
 
 #include "config/Config.h"
+#include "utils/GeoUtils.h"
 
 namespace variometer {
 
@@ -52,6 +53,8 @@ void Application::begin() {
     display_.begin();
     display_.setPowerManager(&powerManager_);
     display_.setRecorder(&flightRecorder_);
+    display_.setTrack(&flightTrack_);
+    display_.setReplaySpeed(settings_.replaySpeed);
     settings_.minSatellites = Config::MIN_SATELLITES_DEFAULT;
 
     // Buzzer defaults to disabled inside the driver; without this it never sounds.
@@ -403,6 +406,22 @@ void Application::updateSensors() {
         lastTraceSampleMs_ = now;
     }
 
+    /*
+     * Offer positions to the map track.
+     *
+     * Polled on a short timer rather than every pass because projecting
+     * and range-checking a sample costs a square root, and the track's
+     * own distance filter decides what is actually worth storing. The
+     * map redraws from whatever the track holds, so this rate is
+     * independent of the display's.
+     */
+    if ((flightData_.flightState == FlightState::FLIGHT ||
+         flightData_.flightState == FlightState::TAKEOFF_DETECTED) &&
+        now - lastTrackSampleMs_ >= Config::FLIGHT_TRACK_SAMPLE_INTERVAL_MS) {
+        flightTrack_.addSample(flightData_);
+        lastTrackSampleMs_ = now;
+    }
+
     flightData_.tracePointCount = static_cast<uint16_t>(flightRecorder_.size());
     if (flightRecorder_.size() > 0) {
         float minAltitude = flightRecorder_.at(0).altitude;
@@ -471,6 +490,15 @@ void Application::initializeFlightSession() {
 
     flightRecorder_.clear();
 
+    /*
+     * Anchor the map's projection at the takeoff point. Done here rather
+     * than lazily on first draw so the LZ stays fixed for the whole
+     * flight, as the map's origin and its takeoff marker.
+     */
+    if (flightData_.hasLz) {
+        flightTrack_.begin(flightData_.lzLatitude, flightData_.lzLongitude);
+    }
+
     // Establish zero altitude at takeoff.
     ms5611_.setTakeoffReference();
 
@@ -498,17 +526,10 @@ float Application::calculateDistanceFromLz(float latitude, float longitude) cons
         return 0.0f;
     }
 
-    const float lat1Rad = latitude * 0.017453292519943295f;
-    const float lon1Rad = longitude * 0.017453292519943295f;
-    const float lat2Rad = flightData_.lzLatitude * 0.017453292519943295f;
-    const float lon2Rad = flightData_.lzLongitude * 0.017453292519943295f;
-
-    const float dLat = lat2Rad - lat1Rad;
-    const float dLon = lon2Rad - lon1Rad;
-    const float a = sinf(dLat * 0.5f) * sinf(dLat * 0.5f) +
-                   cosf(lat1Rad) * cosf(lat2Rad) * sinf(dLon * 0.5f) * sinf(dLon * 0.5f);
-    const float c = 2.0f * atan2f(sqrtf(a), sqrtf(1.0f - a));
-    return 6371.0f * c;
+    // Delegated to GeoUtils so the map and the distance readout cannot
+    // drift apart; this was previously an inline copy of the haversine.
+    return geo::distanceKm(latitude, longitude,
+                           flightData_.lzLatitude, flightData_.lzLongitude);
 }
 
 void Application::updateDisplay() {

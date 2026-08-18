@@ -94,6 +94,33 @@ constexpr size_t GPS_RX_BUFFER_BYTES = 2048;
 
 constexpr uint32_t DISPLAY_UPDATE_INTERVAL_MS = 100;
 constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 1000;
+
+/*
+ * How often a position is offered to the flight-map track.
+ *
+ * Faster than the altitude trace so turns are captured cleanly, but the
+ * track applies its own distance filter, so this is an upper bound on
+ * sampling rather than the storage rate.
+ */
+constexpr uint32_t FLIGHT_TRACK_SAMPLE_INTERVAL_MS = 250;
+
+/*
+ * Dead reckoning, used by FlightTrack to keep the map's "you are here"
+ * marker moving during a GPS dropout.
+ *
+ * TIMEOUT is how long a straight-line, constant-speed extrapolation from
+ * the last known velocity is trusted. Wind, terrain and pilot input all
+ * make that assumption degrade quickly, so this is deliberately short --
+ * long enough to ride out a typical multipath dropout under a canopy or
+ * near terrain, short enough that the marker stops rather than wandering
+ * arbitrarily far from the truth.
+ *
+ * LIVE_GRACE_MS is the small gap treated as normal polling latency
+ * rather than an actual dropout, so the marker is not flagged as
+ * dead-reckoned on every routine sample interval.
+ */
+constexpr uint32_t DEAD_RECKONING_TIMEOUT_MS = 60000;
+constexpr uint32_t DEAD_RECKONING_LIVE_GRACE_MS = 2 * FLIGHT_TRACK_SAMPLE_INTERVAL_MS;
 constexpr uint16_t FLIGHT_RECORDING_DURATION_MINUTES = 120;
 constexpr uint32_t FLIGHT_LOG_FLUSH_INTERVAL_MS = 10000;
 constexpr char WIFI_AP_SSID[] = "Variometer";
