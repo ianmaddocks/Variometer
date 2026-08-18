@@ -36,9 +36,23 @@ void AltitudeTraceScreen::update(const FlightData& data) {
 }
 
 void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) {
+    /*
+     * In flight this screen scrolls: the visible window is always the
+     * newest samples, anchored to the right edge, because the pilot
+     * wants "what just happened." Once the flight is over there is no
+     * "just happened" left -- landing without switching modes would
+     * either freeze on the last few minutes (LANDING_DETECTED/
+     * POST_FLIGHT can hold for a while) or require the pilot to somehow
+     * scroll back through a flight that may have lasted hours. Showing
+     * the whole flight, oldest-to-newest left-to-right, is what a
+     * post-flight review actually needs.
+     */
+    const bool showFullFlight = (data.flightState == FlightState::LANDING_DETECTED ||
+                                 data.flightState == FlightState::POST_FLIGHT);
+
     // Title is intentionally kept simple so the plot remains the dominant element.
     display.display().setCursor(0, 1);
-    display.display().print("Alt trace");
+    display.display().print(showFullFlight ? "Alt trace (full)" : "Alt trace");
     //display.display().drawRect(kPlotX, kPlotY, kPlotW, kPlotH, SH110X_WHITE);
 
     // If there are not enough samples yet, keep the screen readable and explain the empty state.
@@ -56,22 +70,68 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
     const int16_t plotHeight = plotBottom - plotTop;
     const int16_t plotWidth = plotRight - plotLeft;
 
-    // Use the recorder as the source of truth and display only the newest samples.
-    // This keeps the trace scrolling left-to-right without consuming extra memory.
     const FlightRecorder* recorder = display.recorder();
     const size_t totalCount = static_cast<size_t>(data.tracePointCount);
-    const size_t maxVisible = static_cast<size_t>(plotWidth) + 1;
-    const size_t visibleCount = (totalCount < maxVisible) ? totalCount : maxVisible;
-    const size_t startIndex = totalCount - visibleCount;
 
-    // Scale the entire visible trace to the minimum and maximum altitude in the current window.
-    // A minimum span avoids division by zero while preserving a usable display range.
-    float minAlt = recorder->at(startIndex).altitude;
-    float maxAlt = minAlt;
-    for (size_t i = startIndex + 1; i < totalCount; ++i) {
-        const float altitude = recorder->at(i).altitude;
-        if (altitude < minAlt) minAlt = altitude;
-        if (altitude > maxAlt) maxAlt = altitude;
+    /*
+     * Two different mappings from recorded samples to plot columns:
+     *
+     *   live   -- only the newest plotWidth+1 samples, right-anchored,
+     *             one column per sample, so the trace scrolls smoothly
+     *             as new points arrive.
+     *   full   -- always exactly plotWidth+1 columns spanning the whole
+     *             recorded trace, oldest at the left edge, newest at the
+     *             right. sampleIndex() nearest-neighbour maps each
+     *             column back into [0, totalCount). This both downsamples
+     *             a long flight (which can hold thousands of points, up
+     *             to Config::FLIGHT_RECORDING_DURATION_MINUTES) and
+     *             stretches a short one to fill the width -- a 30-second
+     *             test flight should show its shape across the whole
+     *             plot, not sit as a few-pixel sliver at the left edge.
+     */
+    size_t startIndex = 0;
+    size_t visibleCount = 0;
+
+    if (showFullFlight) {
+        visibleCount = static_cast<size_t>(plotWidth) + 1;
+    } else {
+        const size_t maxVisible = static_cast<size_t>(plotWidth) + 1;
+        visibleCount = (totalCount < maxVisible) ? totalCount : maxVisible;
+        startIndex = totalCount - visibleCount;
+    }
+
+    const auto sampleIndex = [&](size_t column) -> size_t {
+        if (!showFullFlight) {
+            return startIndex + column;
+        }
+        return (column * (totalCount - 1)) / (visibleCount - 1);
+    };
+
+    /*
+     * Scale to the true altitude range of what's being shown.
+     *
+     * In full-flight mode this deliberately uses FlightData's
+     * traceAltitudeMin/Max -- computed by Application over every
+     * recorded point -- rather than rescanning only the downsampled
+     * columns here. Resampling can step past the single sample that hit
+     * the flight's actual peak or trough; using the precomputed true
+     * range keeps the printed min/max honest even when the drawn line
+     * has smoothed over a brief spike between columns.
+     */
+    float minAlt;
+    float maxAlt;
+
+    if (showFullFlight) {
+        minAlt = data.traceAltitudeMin;
+        maxAlt = data.traceAltitudeMax;
+    } else {
+        minAlt = recorder->at(startIndex).altitude;
+        maxAlt = minAlt;
+        for (size_t i = startIndex + 1; i < totalCount; ++i) {
+            const float altitude = recorder->at(i).altitude;
+            if (altitude < minAlt) minAlt = altitude;
+            if (altitude > maxAlt) maxAlt = altitude;
+        }
     }
     const float span = maxAlt - minAlt;
     const float range = (span > 1.0f) ? span : 1.0f;
@@ -89,13 +149,27 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
         display.display().drawPixel(x, minY, SH110X_WHITE);
     }
 
-    // Plot each consecutive point in screen space, drawing from right to left so the
-    // newest sample remains at the right edge as the trace scrolls forward in time.
+    /*
+     * Plot each consecutive column.
+     *
+     * Live mode draws right-to-left in the sense that the newest sample
+     * is pinned to plotRight (unchanged from before). Full-flight mode
+     * is simply left-anchored: column 0 at plotLeft, one pixel per
+     * column, since sampleIndex() has already done the resampling.
+     */
     for (size_t i = 0; i + 1 < visibleCount; ++i) {
-        const TracePoint& a = recorder->at(startIndex + i);
-        const TracePoint& b = recorder->at(startIndex + i + 1);
-        const int16_t x0 = plotRight - static_cast<int16_t>(visibleCount - 1 - i);
-        const int16_t x1 = plotRight - static_cast<int16_t>(visibleCount - 1 - (i + 1));
+        const TracePoint& a = recorder->at(sampleIndex(i));
+        const TracePoint& b = recorder->at(sampleIndex(i + 1));
+
+        int16_t x0, x1;
+        if (showFullFlight) {
+            x0 = plotLeft + static_cast<int16_t>(i);
+            x1 = plotLeft + static_cast<int16_t>(i + 1);
+        } else {
+            x0 = plotRight - static_cast<int16_t>(visibleCount - 1 - i);
+            x1 = plotRight - static_cast<int16_t>(visibleCount - 1 - (i + 1));
+        }
+
         const int16_t y0 = plotBottom - static_cast<int16_t>(((a.altitude - minAlt) / range) * plotHeight);
         const int16_t y1 = plotBottom - static_cast<int16_t>(((b.altitude - minAlt) / range) * plotHeight);
         display.display().drawLine(x0, clampY(y0, plotTop, plotBottom),

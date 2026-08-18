@@ -43,7 +43,7 @@ constexpr int16_t kLzMarkerRadius = kCircleR;
  * diagonal = 5) with no wasted margin, keeping it distinct without
  * growing large enough to merge into the wind circle's own outline.
  */
-constexpr int16_t kNorthMarkerRadius = 5;
+constexpr int16_t kNorthMarkerRadius = 6;
 
 // Vario gauge: right edge flush to the screen, widening leftwards away
 // from zero, per the design sketch.
@@ -175,7 +175,8 @@ void WindDirectionScreen::drawWindArrow(DisplayManager& display,
     const float tipLen = kCircleR * 0.95f * scale;
     const float barbLen = kCircleR * 0.98f * scale;
     const float notchLen = kCircleR * 0.32f * scale;
-    constexpr float kBarbAngle = 122.0f * kDegToRad;
+    //constexpr float kBarbAngle = 122.0f * kDegToRad;
+    constexpr float kBarbAngle = 130.0f * kDegToRad;
 
     // Anchor for the label, along the arrow axis, at the inscribed centre.
     const float labelForward = kCircleR * 0.107f * scale;
