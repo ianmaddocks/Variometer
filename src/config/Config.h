@@ -121,6 +121,25 @@ constexpr uint32_t FLIGHT_TRACK_SAMPLE_INTERVAL_MS = 250;
  */
 constexpr uint32_t DEAD_RECKONING_TIMEOUT_MS = 60000;
 constexpr uint32_t DEAD_RECKONING_LIVE_GRACE_MS = 2 * FLIGHT_TRACK_SAMPLE_INTERVAL_MS;
+
+/*
+ * Wind-from-circling estimator (see WindEstimator.h for the technique).
+ *
+ * WINDOW_MS must comfortably exceed one full turn. A paramotor/paraglider
+ * thermalling circle typically takes 15-30s; 45s gives margin without
+ * making the estimate sluggish to respond when the pilot moves to a new
+ * thermal with different wind.
+ *
+ * MIN_SPEED_MS excludes samples too slow for heading to mean anything
+ * (ground handling, just after touchdown) from ever entering the
+ * history.
+ *
+ * MAX_MS is a sanity clamp on the output, not a physical limit -- it
+ * exists so a burst of GPS noise cannot report a nonsense wind speed.
+ */
+constexpr uint32_t WIND_ESTIMATE_WINDOW_MS = 45000;
+constexpr float WIND_ESTIMATE_MIN_SPEED_MS = 3.0f;
+constexpr float WIND_ESTIMATE_MAX_MS = 25.0f;
 constexpr uint16_t FLIGHT_RECORDING_DURATION_MINUTES = 120;
 constexpr uint32_t FLIGHT_LOG_FLUSH_INTERVAL_MS = 10000;
 constexpr char WIFI_AP_SSID[] = "Variometer";
@@ -174,6 +193,25 @@ constexpr float VARIO_MAX_CLIMB = 5.0f;
 constexpr float VARIO_MAX_SINK = -5.0f;
 
 /*
+ * Full-scale deflection of the graphical vario indicator, in m/s.
+ *
+ * Deliberately narrower than VARIO_MAX_CLIMB: the gauge is for reading
+ * ordinary climb and sink at a glance, not for showing extremes. A wider
+ * scale would squash the range a pilot actually cares about into a few
+ * pixels, and would put the 0.5 m/s graduation marks so close together
+ * that they stop being legible.
+ *
+ * Readings beyond this clamp at full deflection; the numeric value
+ * beside the gauge still shows the true figure.
+ */
+constexpr float VARIO_DISPLAY_SCALE_MS = 3.0f;
+
+// Graduation interval on the vario gauge, in m/s. Each boundary is drawn
+// as a 1px unfilled gap so the fill can be read as a value, not just a
+// bar length.
+constexpr float VARIO_DISPLAY_GRADUATION_MS = 0.5f;
+
+/*
  * Length of the linear-regression window used to derive vertical speed.
  *
  * Regression slope noise falls off very fast as the window grows --
@@ -187,8 +225,20 @@ constexpr float VARIO_MAX_SINK = -5.0f;
  * The old 300 ms window forced heavy post-filtering to stay readable,
  * and that filtering is what caused the sluggish-yet-jumpy response.
  * A longer window here is what lets VARIO_FILTER_TAU_MS stay short.
+ *
+ * The window MUST be long enough to hold the 3 samples the regression
+ * requires. That is trivially true for the barometer at ~25 Hz, but GPS
+ * altitude arrives roughly once per second (once per GGA sentence), so
+ * a 1000 ms window would hold a single sample and the vario would sit at
+ * zero forever. The GPS figure below is sized for at least 4 samples at
+ * that rate, which also suits GPS altitude being far noisier: a long
+ * baseline is exactly what a noisy, slow signal needs.
  */
+#ifdef ALTITUDE_SOURCE_GPS
+constexpr uint32_t VARIO_REGRESSION_WINDOW_MS = 8000;
+#else
 constexpr uint32_t VARIO_REGRESSION_WINDOW_MS = 1000;
+#endif
 
 /*
  * Minimum time between oldest and newest sample before a slope is

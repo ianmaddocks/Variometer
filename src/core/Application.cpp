@@ -321,8 +321,11 @@ void Application::updateSensors() {
 
     if (flightData_.hasLz && flightData_.gpsFix) {
         flightData_.distanceFromLZ = calculateDistanceFromLz(flightData_.latitude, flightData_.longitude);
+        flightData_.bearingToLZ = geo::bearingDegrees(flightData_.latitude, flightData_.longitude,
+                                                       flightData_.lzLatitude, flightData_.lzLongitude);
     } else {
         flightData_.distanceFromLZ = 0.0f;
+        flightData_.bearingToLZ = 0.0f;
     }
 
     if (gps_.isMockEnabled() != lastMockMode) {
@@ -510,7 +513,12 @@ void Application::updateFlightLogic() {
      */
     varioCalculator_.update(flightData_, altitudeSampleSeq_, altitudeSampleTimeMs_);
     flightData_.verticalSpeed = varioCalculator_.getVerticalSpeed();
-    windEstimator_.update(flightData_);
+    /*
+     * Safe to call every pass: WindEstimator ingests a sample only when
+     * GPS's position sequence changes, mirroring how the vario is fed
+     * above.
+     */
+    windEstimator_.update(flightData_, gps_.getPositionSampleSequence());
     flightData_.windSpeed = windEstimator_.getWindSpeed();
     flightData_.windDirection = windEstimator_.getWindDirection();
     flightData_.windConfidence = windEstimator_.getWindConfidence();

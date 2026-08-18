@@ -70,7 +70,6 @@ private:
 
     void drawNorthIndicator(DisplayManager& display) const;
     void drawScaleBar(DisplayManager& display, const Viewport& viewport) const;
-    void drawTakeoffMarker(DisplayManager& display, int16_t x, int16_t y) const;
     void drawAircraft(DisplayManager& display,
                       int16_t x, int16_t y, float headingDeg,
                       bool deadReckoned) const;

@@ -84,6 +84,16 @@ public:
         display_.fillCircle(x, y, r, color);
     }
 
+    void drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
+                      int16_t x2, int16_t y2, uint16_t color) {
+        display_.drawTriangle(x0, y0, x1, y1, x2, y2, color);
+    }
+
+    void fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
+                      int16_t x2, int16_t y2, uint16_t color) {
+        display_.fillTriangle(x0, y0, x1, y1, x2, y2, color);
+    }
+
     void display() {
         display_.display();
     }

@@ -55,6 +55,7 @@ void GPS::begin() {
     fix_ = false;
     altitudeSampleSeq_ = 0;
     altitudeSampleTimeMs_ = 0;
+    positionSampleSeq_ = 0;
     utcDateTime_ = DateTime{};
     mockEnabled_ = false;
     mockStartMs_ = 0;
@@ -168,6 +169,10 @@ void GPS::feedSerialSentence(const String& sentence) {
             }
             fix_ = true;
             hasData_ = true;
+
+            // A valid RMC sentence is the sole source of track/groundSpeed,
+            // so this is exactly "a new position/velocity sample arrived".
+            ++positionSampleSeq_;
         }
     }
 }
@@ -211,6 +216,7 @@ uint32_t GPS::getAltitudeSampleSequence() const { return altitudeSampleSeq_; }
 uint32_t GPS::getAltitudeSampleTimeMs() const { return altitudeSampleTimeMs_; }
 float GPS::getGroundSpeed() const { return groundSpeed_; }
 float GPS::getTrack() const { return track_; }
+uint32_t GPS::getPositionSampleSequence() const { return positionSampleSeq_; }
 uint8_t GPS::getSatellites() const { return satellites_; }
 bool GPS::getFixStatus() const { return fix_; }
 GPS::DateTime GPS::getUtcDateTime() const { return utcDateTime_; }

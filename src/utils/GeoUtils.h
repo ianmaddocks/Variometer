@@ -25,12 +25,22 @@ namespace geo {
 
 constexpr float kEarthRadiusM = 6371000.0f;
 constexpr float kDegToRad = 0.017453292519943295f;
+constexpr float kRadToDeg = 57.29577951308232f;
 
 // Great-circle distance in metres.
 float distanceMetres(float lat1, float lon1, float lat2, float lon2);
 
 // Same, in kilometres -- convenience for display code.
 float distanceKm(float lat1, float lon1, float lat2, float lon2);
+
+/*
+ * Initial great-circle bearing from point 1 to point 2, in degrees
+ * (0-360, 0 = north, clockwise). Uses the full spherical formula rather
+ * than the flat local projection below: bearing distorts increasingly
+ * with distance under a flat approximation, and this is used for a
+ * compass readout the pilot reads directly, not a fixed-scale plot.
+ */
+float bearingDegrees(float lat1, float lon1, float lat2, float lon2);
 
 /*
  * Project a position into metres east/north of a reference point.

@@ -32,6 +32,21 @@ float distanceKm(float lat1, float lon1, float lat2, float lon2) {
     return distanceMetres(lat1, lon1, lat2, lon2) / 1000.0f;
 }
 
+float bearingDegrees(float lat1, float lon1, float lat2, float lon2) {
+    const float lat1Rad = lat1 * kDegToRad;
+    const float lat2Rad = lat2 * kDegToRad;
+    const float dLonRad = (lon2 - lon1) * kDegToRad;
+
+    const float y = sinf(dLonRad) * cosf(lat2Rad);
+    const float x = (cosf(lat1Rad) * sinf(lat2Rad)) -
+                    (sinf(lat1Rad) * cosf(lat2Rad) * cosf(dLonRad));
+
+    float bearing = atan2f(y, x) * kRadToDeg;
+    bearing = fmodf(bearing + 360.0f, 360.0f);
+
+    return bearing;
+}
+
 void toLocalMetres(float lat, float lon,
                    float refLat, float refLon, float cosRefLat,
                    float* eastM, float* northM) {

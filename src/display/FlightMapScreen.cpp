@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <math.h>
 
+#include "display/DisplayHelpers.h"
 #include "display/DisplayManager.h"
 #include "flight/FlightTrack.h"
 
@@ -436,7 +437,7 @@ void FlightMapScreen::drawTopDown(DisplayManager& display,
                                    kPlotX + 5, kPlotRight - 5);
     const int16_t lzY = clampInt16(static_cast<int32_t>(toScreenY(0.0f)),
                                    kPlotY + 5, kPlotBottom - 5);
-    drawTakeoffMarker(display, lzX, lzY);
+    display_helpers::drawLzMarker(display, lzX, lzY);
 
     const int16_t acX = clampInt16(static_cast<int32_t>(toScreenX(liveEast)),
                                    kPlotX + 7, kPlotRight - 7);
@@ -455,15 +456,6 @@ void FlightMapScreen::drawTopDown(DisplayManager& display,
 
     drawNorthIndicator(display);
     drawScaleBar(display, viewport);
-}
-
-void FlightMapScreen::drawTakeoffMarker(DisplayManager& display,
-                                        int16_t x, int16_t y) const {
-    // Circle with a cross through it: distinct from the aircraft arrow
-    // at a glance, and still legible when the track passes over it.
-    display.display().drawCircle(x, y, 3, SH110X_WHITE);
-    display.display().drawLine(x - 5, y, x + 5, y, SH110X_WHITE);
-    display.display().drawLine(x, y - 5, x, y + 5, SH110X_WHITE);
 }
 
 void FlightMapScreen::drawAircraft(DisplayManager& display,
@@ -677,7 +669,7 @@ void FlightMapScreen::drawThreeD(DisplayManager& display,
     const int16_t lzGroundY =
         clampInt16(static_cast<int32_t>(projectY(0.0f, 0.0f, baseAlt)),
                    kPlotY + 5, kPlotBottom - 5);
-    drawTakeoffMarker(display, lzGroundX, lzGroundY);
+    display_helpers::drawLzMarker(display, lzGroundX, lzGroundY);
 
     for (size_t i = 0; i + 1 < visible; ++i) {
         const TrackPoint& a = track_->at(i);

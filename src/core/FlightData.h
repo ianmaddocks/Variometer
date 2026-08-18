@@ -42,6 +42,12 @@ struct FlightData {
     float batteryPercent = 0.0f;
     uint32_t flightDuration = 0;
     float distanceFromLZ = 0.0f;
+
+    // True/geographic bearing from the current position to the LZ, in
+    // degrees (0-360, 0=north). 0.0f and meaningless whenever hasLz is
+    // false -- always check hasLz, not this value, to detect "no LZ yet".
+    float bearingToLZ = 0.0f;
+
     float lzLatitude = 0.0f;
     float lzLongitude = 0.0f;
     bool hasLz = false;

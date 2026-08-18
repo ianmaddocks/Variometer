@@ -43,6 +43,18 @@ public:
     bool getFixStatus() const;
     DateTime getUtcDateTime() const;
 
+    /*
+     * Position sample handshake, same idea as the altitude one above but
+     * for track/groundSpeed, which are set from RMC rather than GGA.
+     *
+     * WindEstimator polls every loop pass but must only ingest genuinely
+     * new fixes: track/groundSpeed hold their last value between fixes,
+     * so without this it would push dozens of duplicate headings into
+     * its circling-drift history per real fix, without adding any new
+     * heading coverage.
+     */
+    uint32_t getPositionSampleSequence() const;
+
 private:
     void feedMockSentence(const String& sentence);
     void feedSerialSentence(const String& sentence);
@@ -57,6 +69,7 @@ private:
     bool fix_ = false;
     uint32_t altitudeSampleSeq_ = 0;
     uint32_t altitudeSampleTimeMs_ = 0;
+    uint32_t positionSampleSeq_ = 0;
     DateTime utcDateTime_;
     bool mockEnabled_ = false;
     uint32_t mockStartMs_ = 0;
