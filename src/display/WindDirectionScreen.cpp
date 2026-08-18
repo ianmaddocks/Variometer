@@ -28,12 +28,10 @@ constexpr int16_t kCircleCX = 38;
 constexpr int16_t kCircleCY = (kContentTop + kContentBottom) / 2;
 constexpr int16_t kCircleR = 31;
 
-// Radius of the N/S/E/W ring and the LZ marker's centre, both outside
-// the wind circle. +4 rather than something more generous is a hard
-// constraint, not a style choice: a compass letter centred any further
-// out clips off the left/right edges of the screen -- see the
-// screen-bounds comment on kCompassRadius below.
-constexpr int16_t kCompassRadius = kCircleR + 4;
+// Radius of the north marker and the LZ marker's centre: both sit
+// directly on the wind circle's edge, matching radii so neither reads as
+// more "inside" or "outside" the instrument than the other.
+constexpr int16_t kCompassRadius = kCircleR;
 constexpr int16_t kLzMarkerRadius = kCircleR;
 
 /*
@@ -65,7 +63,9 @@ constexpr float kDegToRad = 0.017453292519943295f;
 // drawn -- an arrow pointing nowhere in particular is worse than none.
 constexpr float kMinConfidence = 0.2f;
 
+#ifdef DEBUG
 String lastWindStatus;
+#endif
 
 int16_t clampI16(int32_t v, int16_t lo, int16_t hi) {
     if (v < lo) return lo;
@@ -126,7 +126,9 @@ void bearingToPoint(float bearingDeg, float forward, float lateral,
 }  // namespace
 
 void WindDirectionScreen::enter() {
+#ifdef DEBUG
     lastWindStatus = "";
+#endif
     DBGLN("Entering wind direction screen");
 }
 
@@ -208,42 +210,32 @@ void WindDirectionScreen::drawWindArrow(DisplayManager& display,
 }
 
 /*
- * N/S/E/W ring, rotated so it always agrees with the wind arrow and LZ
+ * North marker, rotated so it always agrees with the wind arrow and LZ
  * marker about what "up" currently means.
  *
  * This replaces a fixed north tick from an earlier version of this
  * screen. A north-up tick is actively wrong once the rose is track-up:
- * only "north" would ever ordinarily point up on the ring, and the tick
- * would then be redundant one moment and misleading the rest of the
- * time it sat still while everything around it rotated.
+ * "north" only points up when flying due north, and the tick would then
+ * be redundant one moment and misleading the rest of the time it sat
+ * still while everything around it rotated.
  *
- * "N" is drawn inverted (filled disc, black text) rather than plain
- * white-on-black like the other three points. Since this rose is
- * heading-up, north is the one point on the ring that keeps moving to a
- * new position every time the aircraft turns -- an inverted mark is what
- * lets it be picked out at a glance without reading each letter in turn.
+ * S/E/W were dropped: on a heading-up rose N is the one reference a
+ * pilot actually needs (everything else is read relative to the nose,
+ * not by cardinal direction), and three more rotating labels only added
+ * clutter without adding information.
+ *
+ * Drawn inverted (filled disc, black text) rather than plain
+ * white-on-black so it can be picked out at a glance without reading it.
  */
 void WindDirectionScreen::drawCompassRing(DisplayManager& display,
                                           float trackDeg) const {
-    static const struct { float absoluteDeg; const char* label; } kPoints[] = {
-        {0.0f, "N"}, {90.0f, "E"}, {180.0f, "S"}, {270.0f, "W"},
-    };
+    const float screenBearing = relativeBearing(0.0f, trackDeg);
 
-    for (const auto& point : kPoints) {
-        const float screenBearing = relativeBearing(point.absoluteDeg, trackDeg);
+    int16_t x, y;
+    bearingToPoint(screenBearing, static_cast<float>(kCompassRadius), 0.0f, &x, &y);
 
-        int16_t x, y;
-        bearingToPoint(screenBearing, static_cast<float>(kCompassRadius), 0.0f, &x, &y);
-
-        const bool isNorth = (point.absoluteDeg == 0.0f);
-
-        if (isNorth) {
-            display.display().fillCircle(x, y, kNorthMarkerRadius, SH110X_WHITE);
-            drawCentredText(display, x, y, point.label, SH110X_BLACK);
-        } else {
-            drawCentredText(display, x, y, point.label, SH110X_WHITE);
-        }
-    }
+    display.display().fillCircle(x, y, kNorthMarkerRadius, SH110X_WHITE);
+    drawCentredText(display, x, y, "N", SH110X_BLACK);
 }
 
 /*
@@ -326,6 +318,9 @@ void WindDirectionScreen::drawVarioGauge(DisplayManager& display,
 void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) {
     const bool haveWind = (data.windConfidence > kMinConfidence);
 
+    // See VarioScreen.cpp for why this is compiled out entirely in
+    // release builds rather than left as a DBGLN no-op.
+#ifdef DEBUG
     String status = "Wind: " + String(haveWind ? data.windSpeed : 0.0f, 1) + "m/s " +
                     String(static_cast<int>(data.windDirection)) + "deg conf " +
                     String(static_cast<int>(data.windConfidence * 100.0f)) +
@@ -334,6 +329,7 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
         lastWindStatus = status;
         DBGLN(status);
     }
+#endif
 
     // Confidence folded into the header rather than placed on the rose
     // itself: the top of the circle is now live space that the compass

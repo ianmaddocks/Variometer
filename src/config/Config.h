@@ -276,4 +276,38 @@ constexpr float VARIO_ZERO_THRESHOLD = 0.03f;
 // Internal calculation limit.
 // This is deliberately wider than the +/-5 m/s display range.
 constexpr float VARIO_CALC_MAX = 20.0f;
+
+/*
+ * BLE telemetry, for feeding a phone-based flight app (FlyGaggle) live
+ * position/vario data.
+ *
+ * IMPORTANT CAVEAT: this targets the widely-used convention for
+ * BLE-based vario/GPS accessories -- a GATT server exposing the Nordic
+ * UART Service (NUS) that streams plain-text NMEA, specifically standard
+ * $GPGGA/$GPRMC plus the $LK8EX1 vario sentence originated by LK8000 and
+ * since adopted by XCTrack, FlySkyHy and others as their "generic
+ * Bluetooth LE vario" input. This is NOT a confirmed FlyGaggle
+ * specification -- verify against FlyGaggle's own external-instrument
+ * pairing documentation, and adjust the service/characteristic UUIDs or
+ * sentence set below if it expects something else.
+ *
+ * The device name is what the phone sees when scanning; it does not need
+ * to match anything app-specific unless FlyGaggle filters by name.
+ */
+constexpr char BLE_DEVICE_NAME[] = "Variometer";
+
+// GPS-derived sentences (GGA/RMC) at a conventional 1 Hz.
+constexpr uint32_t BLE_GPS_SENTENCE_INTERVAL_MS = 1000;
+
+// LK8EX1 (vario) sent faster than GPS position, since a paraglider vario
+// needle/tone in the client app reads as laggy below a few Hz -- this
+// follows what dedicated BLE vario accessories typically transmit at.
+constexpr uint32_t BLE_VARIO_SENTENCE_INTERVAL_MS = 200;
+
+// Nordic UART Service UUIDs -- fixed, standardised values, not
+// project-specific. Do not change these unless deliberately moving away
+// from NUS compatibility.
+constexpr char BLE_NUS_SERVICE_UUID[] = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
+constexpr char BLE_NUS_TX_CHARACTERISTIC_UUID[] = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
+constexpr char BLE_NUS_RX_CHARACTERISTIC_UUID[] = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
 }  // namespace Config

@@ -134,6 +134,7 @@ public:
     FlightRecorder* recorder() const;
     SimpleDisplay& display();
     bool isPowerOffScreen() const { return activeScreen_ == ScreenId::PowerOff; }
+    bool isPreTakeoffScreen() const { return activeScreen_ == ScreenId::PreTakeoff; }
 
 private:
     void updateScreenSelection(const FlightData& data);

@@ -23,7 +23,7 @@ private:
     void drawWindArrow(DisplayManager& display, float screenBearingDeg,
                        float speedMs, float confidence) const;
 
-    // N/S/E/W ring, rotated so "up" tracks the current heading.
+    // North marker, rotated so "up" tracks the current heading.
     void drawCompassRing(DisplayManager& display, float trackDeg) const;
 
     // Twin triangles meeting at zero: climb fills upward, sink downward.

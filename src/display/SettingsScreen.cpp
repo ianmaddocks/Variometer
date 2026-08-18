@@ -6,11 +6,15 @@
 
 namespace variometer {
 namespace {
+#ifdef DEBUG
     String lastSettingsStatus;
+#endif
 }
 
 void SettingsScreen::enter() {
+#ifdef DEBUG
     lastSettingsStatus = "";
+#endif
     DBGLN("Entering settings screen");
 }
 
@@ -19,11 +23,15 @@ void SettingsScreen::update(const FlightData& data) {
 }
 
 void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
+    // See VarioScreen.cpp for why this is compiled out entirely in
+    // release builds rather than left as a DBGLN no-op.
+#ifdef DEBUG
     String status = data.gpsFix ? "Settings: GPS fix active" : "Settings: GPS fix pending";
     if (status != lastSettingsStatus) {
         lastSettingsStatus = status;
         DBGLN(status);
     }
+#endif
 
     int line = 3;
     display.display().setCursor(0, 1);

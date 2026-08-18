@@ -14,6 +14,7 @@
 #include "flight/FlightTrack.h"
 #include "flight/FlightLogStorage.h"
 #include "display/DisplayManager.h"
+#include "telemetry/BleTelemetry.h"
 
 namespace variometer {
 
@@ -56,6 +57,7 @@ private:
     FlightTrack flightTrack_;
     FlightLogStorage flightLogStorage_;
     DisplayManager display_;
+    BleTelemetry bleTelemetry_;
 
     bool mockAltitudeInitialized = false;
     bool lastMockMode = false;

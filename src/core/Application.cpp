@@ -60,6 +60,10 @@ void Application::begin() {
     // Buzzer defaults to disabled inside the driver; without this it never sounds.
     buzzer_.setEnabled(settings_.audioVarioEnabled);
     buzzer_.playStartupTune();
+
+    // BLE stack init is independent of the I2C bus and sensors above, so
+    // it does not need to sit before or after any of that setup.
+    bleTelemetry_.begin();
 }
 
 void Application::scanI2cBus() {
@@ -187,7 +191,20 @@ void Application::loop() {
 
     if (encoder_.wasPressed()) {
         display_.handleButtonPress();
-        if (flightData_.flightState == FlightState::PREFLIGHT) {
+
+        /*
+         * Gated on the Pre-Takeoff screen specifically, not merely on
+         * PREFLIGHT state. The spec ties manual takeoff to "pressing the
+         * encoder button while in this screen" (Pre-Takeoff); the check
+         * used to be state-only, so a press on ANY preflight screen --
+         * StartUp while still waiting for GPS lock, Settings, even
+         * PowerOff -- silently forced takeoff. On Settings specifically
+         * that meant a single press both toggled edit mode AND started
+         * the flight, since handleButtonPress() above reads the same
+         * press for its own screen-specific action.
+         */
+        if (flightData_.flightState == FlightState::PREFLIGHT &&
+            display_.isPreTakeoffScreen()) {
             flightDetector_.requestTakeoff();
         }
     }
@@ -217,6 +234,15 @@ void Application::loop() {
         updateFlightLogic();
         lastLogicMs_ = now;
     }
+
+    /*
+     * Safe to call every pass: BleTelemetry internally rate-limits its
+     * own sentence timers and returns immediately when nothing is
+     * connected, so this costs nothing extra on top of the check it was
+     * already going to do.
+     */
+    bleTelemetry_.update(flightData_, gps_.getUtcDateTime(), ms5611_.isValid(),
+                         ms5611_.getPressure(), ms5611_.getTemperature());
 
     if (now - lastAudioMs_ >= 20) {
         updateAudio();
@@ -441,12 +467,35 @@ void Application::updateSensors() {
     if ((flightData_.flightState == FlightState::FLIGHT ||
          flightData_.flightState == FlightState::TAKEOFF_DETECTED) &&
         now - lastTraceSampleMs_ >= Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS) {
+        const bool wasEmpty = (flightRecorder_.size() == 0);
+
         flightRecorder_.addPoint(flightData_.barometricAltitude,
                                  static_cast<float>(now) / 1000.0f,
                                  flightData_.latitude,
                                  flightData_.longitude);
         flightLogStorage_.appendPoint(flightRecorder_.at(flightRecorder_.size() - 1));
         lastTraceSampleMs_ = now;
+
+        /*
+         * Update the running min/max incrementally instead of rescanning
+         * the whole recorder (see below). A new point arrives at most
+         * once per ALTITUDE_TRACE_SAMPLE_INTERVAL_MS, so this is the only
+         * place the range can actually change.
+         */
+        const float newAltitude = flightData_.barometricAltitude;
+
+        if (wasEmpty) {
+            flightData_.traceAltitudeMin = newAltitude;
+            flightData_.traceAltitudeMax = newAltitude;
+        } else {
+            if (newAltitude < flightData_.traceAltitudeMin) {
+                flightData_.traceAltitudeMin = newAltitude;
+            }
+            if (newAltitude > flightData_.traceAltitudeMax) {
+                flightData_.traceAltitudeMax = newAltitude;
+            }
+        }
+        flightData_.traceAltitudeSpan = flightData_.traceAltitudeMax - flightData_.traceAltitudeMin;
     }
 
     /*
@@ -465,23 +514,32 @@ void Application::updateSensors() {
         lastTrackSampleMs_ = now;
     }
 
+    /*
+     * traceAltitudeMin/Max/Span are maintained incrementally above, at
+     * the point a new sample is actually added -- not here.
+     *
+     * This used to rescan the entire recorder (up to MAX_POINTS =
+     * FLIGHT_RECORDING_DURATION_MINUTES * 60, i.e. 7200 points for a
+     * full 2-hour flight) unconditionally on every loop() pass, even
+     * though a new point arrives at most once a second. At the loop
+     * rates this app runs (several hundred Hz), that repeated the same
+     * O(n) scan hundreds of times between each new point for no new
+     * information -- millions of redundant comparisons per second on a
+     * flight nearing the buffer's capacity.
+     *
+     * Known trade-off: once the recorder is full it evicts its oldest
+     * point per new sample (see RingBuffer). The incremental min/max
+     * above never revisits evicted points, so on a flight long enough to
+     * start evicting (> FLIGHT_RECORDING_DURATION_MINUTES), a range
+     * extreme that has since scrolled out of the buffer stays reported
+     * until a new extreme replaces it -- whereas the old rescan would
+     * have reflected only what's currently retained. Accepted because
+     * the flights this device targets rarely exceed the buffer's 2-hour
+     * span, and paying an O(n) scan every loop to handle the rare case
+     * that does is the wrong trade the rest of the time.
+     */
     flightData_.tracePointCount = static_cast<uint16_t>(flightRecorder_.size());
-    if (flightRecorder_.size() > 0) {
-        float minAltitude = flightRecorder_.at(0).altitude;
-        float maxAltitude = flightRecorder_.at(0).altitude;
-        for (size_t i = 1; i < flightRecorder_.size(); ++i) {
-            const float altitude = flightRecorder_.at(i).altitude;
-            if (altitude < minAltitude) {
-                minAltitude = altitude;
-            }
-            if (altitude > maxAltitude) {
-                maxAltitude = altitude;
-            }
-        }
-        flightData_.traceAltitudeMin = minAltitude;
-        flightData_.traceAltitudeMax = maxAltitude;
-        flightData_.traceAltitudeSpan = maxAltitude - minAltitude;
-    } else {
+    if (flightRecorder_.size() == 0) {
         flightData_.traceAltitudeMin = flightData_.barometricAltitude;
         flightData_.traceAltitudeMax = flightData_.barometricAltitude;
         flightData_.traceAltitudeSpan = 0.0f;
