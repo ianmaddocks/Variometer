@@ -177,8 +177,17 @@ void WindDirectionScreen::drawWindArrow(DisplayManager& display,
     const float tipLen = kCircleR * 0.95f * scale;
     const float barbLen = kCircleR * 0.98f * scale;
     const float notchLen = kCircleR * 0.32f * scale;
-    //constexpr float kBarbAngle = 122.0f * kDegToRad;
-    constexpr float kBarbAngle = 130.0f * kDegToRad;
+    /*
+     * Must stay at 122 deg, not a cosmetic tweak: this angle was solved
+     * for so the dart's inscribed radius (~12.9px, see comment above)
+     * covers the 4-character label at 12.65px. A later change to 130
+     * deg shrank that radius to ~11.2px at full confidence and ~9.2px
+     * at the minimum drawn confidence, clipping readings of 10+ m/s
+     * (reachable -- WIND_ESTIMATE_MAX_MS is 25) black-on-black outside
+     * the fill. If the barb angle needs to change again, recompute the
+     * inscribed radius against the label size first.
+     */
+    constexpr float kBarbAngle = 122.0f * kDegToRad;
 
     // Anchor for the label, along the arrow axis, at the inscribed centre.
     const float labelForward = kCircleR * 0.107f * scale;

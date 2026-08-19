@@ -902,12 +902,13 @@ Improve:
 ## Known Regressions — Do Not Reintroduce  
 The following changes were tried, caused a real regression, and were reverted (see commit `5c0a98f`, "undone most Claude", which rolled back parts of `170d5cf`). Do not reapply them without also fixing the root cause described.
 
-### PREFLIGHT screen-cycle array must contain `StartUp`, not `PreTakeoff`  
+### PREFLIGHT screen-cycle array must contain `StartUp`, not `PreTakeoff` — RESOLVED, see below  
 `DisplayManager::handleEncoderDelta()` picks a `preflightOrder[]` array to cycle through while `currentFlightState_ == FlightState::PREFLIGHT`. It was once changed from `{StartUp, Settings, PowerOff}` to `{PreTakeoff, Settings, PowerOff}` to better match the screen names used elsewhere in this document. That change froze the UI on the StartUp screen:  
 * Any encoder rotation sets `manualSelectionActive_ = true` — even while still on the StartUp screen, before GPS lock.  
-* `updateScreenSelection()` only performs the automatic StartUp → PreTakeoff transition (on GPS lock) when `manualSelectionActive_` is false.  
-* With `PreTakeoff` in the array instead of `StartUp`, rotating the encoder while on the StartUp screen matches nothing, so the manual cycle silently does nothing — and `manualSelectionActive_` is now stuck `true`, so the automatic transition never fires either. The device is stuck on the StartUp screen permanently, with no manual or automatic way off it.  
-If `PreTakeoff` needs to replace `StartUp` in this array again, first fix the underlying cause — e.g. ignore encoder rotation while `activeScreen_ == ScreenId::StartUp`, or don't let a rotation on that screen set `manualSelectionActive_`, or clear `manualSelectionActive_` when the automatic state-driven transition happens. Verify by rotating the encoder once while still waiting for GPS lock, then confirming the screen still auto-advances to Pre-takeoff once lock is acquired.
+* `updateScreenSelection()` only performed the automatic StartUp → PreTakeoff transition (on GPS lock) when `manualSelectionActive_` was false.  
+* With `PreTakeoff` in the array instead of `StartUp`, rotating the encoder while on the StartUp screen matched nothing, so the manual cycle silently did nothing — and `manualSelectionActive_` stayed stuck `true`, so the automatic transition never fired either. The device got stuck on the StartUp screen permanently, with no manual or automatic way off it.  
+
+**Fixed properly**: `updateScreenSelection()` now runs the StartUp → PreTakeoff transition *before* the `manualSelectionActive_` guard (it's checked unconditionally whenever `activeScreen_ == ScreenId::StartUp` and GPS is locked, with an early `return`), so a prior encoder touch can no longer block it. `preflightOrder[]` now correctly contains `PreTakeoff` again, matching the spec. If StartUp/PreTakeoff navigation ever seems stuck again, check that ordering in `updateScreenSelection()` first — the fix depends on the auto-transition check running *before*, not after, the `manualSelectionActive_` guard.
 
 ### MS5611 pressure formula: the final `>>15` applies to the whole expression, not just `OFF`  
 Per the MS5611 datasheet, `P = (D1*SENS/2^21 - OFF) / 2^15` — the `>>15` must be applied after subtracting `OFF`, not only to `OFF` on its own. A change once rewrote this in `MS5611Sensor.cpp` as:  

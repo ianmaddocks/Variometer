@@ -175,16 +175,37 @@ void DisplayManager::updateScreenSelection(const FlightData& data) {
         return;
     }
 
+    /*
+     * StartUp -> PreTakeoff is a mandatory hand-off once GPS locks, not
+     * a "helpful default" the pilot can override by having touched the
+     * encoder earlier. Unlike the FLIGHT/POST_FLIGHT auto-screens above
+     * (which defer to a manual choice once the pilot has made one),
+     * StartUp is a transient "waiting for GPS" state with nothing
+     * useful to do once locked -- it must always hand off, even if the
+     * pilot rotated the encoder while still waiting (which latches
+     * manualSelectionActive_ but is a no-op screen-wise, since StartUp
+     * is not itself in preflightOrder[]). This check therefore runs
+     * before the manualSelectionActive_ guard below, deliberately.
+     *
+     * Without this carve-out, a single encoder rotation before lock
+     * permanently prevented the advance to PreTakeoff -- which, since
+     * PreTakeoff is what preflightOrder[] cycles through, made manual
+     * takeoff (gated on being on the Pre-Takeoff screen) unreachable
+     * for the rest of the session.
+     */
+    if (data.gpsFix && data.satellites >= 4 && activeScreen_ == ScreenId::StartUp) {
+        setScreen(ScreenId::PreTakeoff);
+        return;
+    }
+
     if (manualSelectionActive_) {
         return;
     }
 
-    if (data.gpsFix && data.satellites >= 4) {
-        if (activeScreen_ == ScreenId::StartUp) {
-            setScreen(ScreenId::PreTakeoff);
+    if (!data.gpsFix || data.satellites < 4) {
+        if (activeScreen_ != ScreenId::StartUp) {
+            setScreen(ScreenId::StartUp);
         }
-    } else if (activeScreen_ != ScreenId::StartUp) {
-        setScreen(ScreenId::StartUp);
     }
 }
 
@@ -289,7 +310,21 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     ScreenId nextScreen = activeScreen_;
 
     if (currentFlightState_ == FlightState::PREFLIGHT) {
-        static const ScreenId preflightOrder[] = {ScreenId::StartUp, ScreenId::Settings, ScreenId::PowerOff};
+        /*
+         * PreTakeoff, not StartUp, per the spec's Pre-takeoff screen
+         * cycle (Settings / Power Off / Pre-Takeoff). An earlier attempt
+         * at this exact change was reverted (see "Known Regressions" in
+         * copilot-instructions.md) because it froze the UI on StartUp:
+         * manualSelectionActive_ blocked the StartUp->PreTakeoff
+         * auto-transition once the encoder had been touched, and with
+         * StartUp no longer in this ring, encoder input on StartUp
+         * became a permanent dead end. That root cause is now fixed
+         * above (the auto-transition runs unconditionally before the
+         * manualSelectionActive_ guard), so this change is safe to
+         * reapply. If StartUp/PreTakeoff navigation ever seems stuck
+         * again, check that fix before touching this array.
+         */
+        static const ScreenId preflightOrder[] = {ScreenId::PreTakeoff, ScreenId::Settings, ScreenId::PowerOff};
         constexpr int count = 3;
         for (int i = 0; i < count; ++i) {
             if (preflightOrder[i] == activeScreen_) {
