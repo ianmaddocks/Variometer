@@ -105,6 +105,7 @@ private:
 class StartUpScreen;
 class PreTakeoffScreen;
 class VarioScreen;
+class VarioBarScreen;
 class AltitudeTraceScreen;
 class WindDirectionScreen;
 class FlightMapScreen;
@@ -147,6 +148,7 @@ private:
     StartUpScreen* startupScreen_ = nullptr;
     PreTakeoffScreen* preTakeoffScreen_ = nullptr;
     VarioScreen* variometerScreen_ = nullptr;
+    VarioBarScreen* varioBarScreen_ = nullptr;
     AltitudeTraceScreen* altitudeTraceScreen_ = nullptr;
     WindDirectionScreen* windDirectionScreen_ = nullptr;
     FlightMapScreen* flightMapScreen_ = nullptr;

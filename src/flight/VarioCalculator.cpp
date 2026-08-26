@@ -17,6 +17,11 @@ void VarioCalculator::reset() {
 
     filterPrimed_ = false;
     lastFilterTimeMs_ = 0;
+
+    averageHistory_.clear();
+    lastAverageSampleMs_ = 0;
+    averagePrimed_ = false;
+    verticalSpeedAverage30s_ = 0.0f;
 }
 
 void VarioCalculator::update(const FlightData& data,
@@ -26,6 +31,25 @@ void VarioCalculator::update(const FlightData& data,
 
     if (!isfinite(altitude)) {
         return;
+    }
+
+    /*
+     * 30-second average, sampled on its own 1 Hz wall-clock cadence --
+     * deliberately independent of the sampleSequence dedup a few lines
+     * below. That dedup exists so the high-rate regression buffer isn't
+     * fed duplicate readings between real sensor updates; this average
+     * instead wants "whatever the current altitude reads, once a
+     * second", the same thing a dedicated hardware vario would poll on
+     * a timer, regardless of how fast the underlying sensor updates.
+     */
+    const uint32_t nowMs = millis();
+
+    if (!averagePrimed_ ||
+        (nowMs - lastAverageSampleMs_) >= Config::VARIO_AVERAGE_SAMPLE_INTERVAL_MS) {
+        averageHistory_.push({altitude, nowMs});
+        lastAverageSampleMs_ = nowMs;
+        averagePrimed_ = true;
+        recomputeAverage();
     }
 
     /*
@@ -291,6 +315,31 @@ float VarioCalculator::getVerticalSpeed() const {
 
 float VarioCalculator::getRawVerticalSpeed() const {
     return rawVerticalSpeed_;
+}
+
+float VarioCalculator::getVerticalSpeedAverage30s() const {
+    return verticalSpeedAverage30s_;
+}
+
+void VarioCalculator::recomputeAverage() {
+    if (averageHistory_.size() < 2) {
+        // Nothing to derive a slope from yet; leave the last value (0.0f
+        // initially) rather than reporting a false reading from a
+        // single point.
+        return;
+    }
+
+    const Sample& oldest = averageHistory_.at(0);
+    const Sample& newest = averageHistory_.at(averageHistory_.size() - 1);
+
+    const float elapsedSec =
+        static_cast<float>(newest.timeMs - oldest.timeMs) / 1000.0f;
+
+    if (elapsedSec <= 0.0f) {
+        return;
+    }
+
+    verticalSpeedAverage30s_ = (newest.altitude - oldest.altitude) / elapsedSec;
 }
 
 }  // namespace variometer

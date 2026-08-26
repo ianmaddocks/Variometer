@@ -212,6 +212,38 @@ constexpr float VARIO_DISPLAY_SCALE_MS = 3.0f;
 constexpr float VARIO_DISPLAY_GRADUATION_MS = 0.5f;
 
 /*
+ * VarioBarScreen tuning (screen-spec.md / the ported vario_screen.h/.cpp
+ * design). Named separately from VARIO_DISPLAY_SCALE_MS above, which
+ * belongs to WindDirectionScreen's twin-triangle gauge -- a different
+ * screen with a deliberately different (narrower) scale, not the same
+ * value under two names.
+ */
+// Full-scale deflection of the climb bar, in m/s. 5.0 matches the
+// commercial convention for free flight (screen-spec.md). Do NOT
+// auto-range this: a scale that rescales itself destroys the muscle
+// memory the bar exists to build.
+constexpr float VARIO_BAR_SCALE_MS = 5.0f;
+
+// Below this sink rate the numeric block inverts to black-on-white --
+// the mono equivalent of a red needle.
+constexpr float VARIO_BAR_INVERT_BELOW_MS = -1.5f;
+
+// Readings inside +/- this are shown as exactly zero, so the bar and
+// the sign glyph don't flicker in still air.
+constexpr float VARIO_BAR_DEAD_BAND_MS = 0.05f;
+
+/*
+ * 30-second average vario window (VarioCalculator).
+ *
+ * Sized so that once the ring buffer is full, the span between its
+ * oldest and newest sample is as close to 30s as a 1 Hz sampling
+ * cadence allows: N samples pushed exactly 1000ms apart span (N-1)
+ * seconds, so 31 samples span 30s exactly.
+ */
+constexpr size_t VARIO_AVERAGE_HISTORY_SIZE = 31;
+constexpr uint32_t VARIO_AVERAGE_SAMPLE_INTERVAL_MS = 1000;
+
+/*
  * Length of the linear-regression window used to derive vertical speed.
  *
  * Regression slope noise falls off very fast as the window grows --

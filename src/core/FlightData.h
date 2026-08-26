@@ -34,6 +34,12 @@ struct FlightData {
     float barometricAltitude = 0.0f;
     float relativeAltitude = 0.0f;
     float verticalSpeed = 0.0f;
+
+    // 30-second average vario (VarioCalculator), for VarioBarScreen's
+    // dashed on-bar marker. 0.0f until at least two samples of the
+    // averaging window have been collected (see VarioCalculator.cpp).
+    float verticalSpeedAverage30s = 0.0f;
+
     float groundSpeed = 0.0f;
     float track = 0.0f;
     uint8_t satellites = 0;

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "config/Config.h"
 #include "core/FlightData.h"
 #include "utils/RingBuffer.h"
 
@@ -38,11 +39,19 @@ public:
     float getVerticalSpeed() const;
     float getRawVerticalSpeed() const;
 
+    // 30-second average vario: (newest altitude - oldest altitude) /
+    // elapsed, over a ring buffer sampled on its own 1 Hz wall-clock
+    // cadence (see update()). 0.0f until at least two samples exist.
+    float getVerticalSpeedAverage30s() const;
+
 private:
     struct Sample {
         float altitude;
         uint32_t timeMs;
     };
+
+    // Recomputes verticalSpeedAverage30s_ from averageHistory_.
+    void recomputeAverage();
 
     /*
      * Must hold a full VARIO_REGRESSION_WINDOW_MS of samples at the
@@ -70,6 +79,20 @@ private:
 
     // Counts accepted samples for Config::VARIO_TRACE_DECIMATION.
     uint8_t traceCounter_ = 0;
+
+    /*
+     * 30s-average buffer. Deliberately separate from history_ above:
+     * that buffer holds a short, dense window for the high-rate
+     * regression and is fed only on genuinely new sensor samples (via
+     * the sampleSequence dedup); this one holds a long, sparse window
+     * on its own independent 1 Hz wall-clock timer, matching how a
+     * dedicated hardware vario would poll "the current altitude, once a
+     * second" regardless of how fast the underlying sensor updates.
+     */
+    RingBuffer<Sample, Config::VARIO_AVERAGE_HISTORY_SIZE> averageHistory_;
+    uint32_t lastAverageSampleMs_ = 0;
+    bool averagePrimed_ = false;
+    float verticalSpeedAverage30s_ = 0.0f;
 };
 
 }  // namespace variometer

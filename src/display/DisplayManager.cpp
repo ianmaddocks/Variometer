@@ -8,6 +8,7 @@
 #include "display/SettingsScreen.h"
 #include "display/StartUpScreen.h"
 #include "display/VarioScreen.h"
+#include "display/VarioBarScreen.h"
 #include "display/WindDirectionScreen.h"
 #include "display/FlightMapScreen.h"
 #include "display/PowerOffScreen.h"
@@ -83,6 +84,7 @@ DisplayManager::DisplayManager()
     : startupScreen_(new StartUpScreen()),
       preTakeoffScreen_(new PreTakeoffScreen()),
       variometerScreen_(new VarioScreen()),
+      varioBarScreen_(new VarioBarScreen()),
       altitudeTraceScreen_(new AltitudeTraceScreen()),
       windDirectionScreen_(new WindDirectionScreen()),
       flightMapScreen_(new FlightMapScreen()),
@@ -125,6 +127,7 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (previous == ScreenId::StartUp) startupScreen_->exit();
     if (previous == ScreenId::PreTakeoff) preTakeoffScreen_->exit();
     if (previous == ScreenId::Variometer) variometerScreen_->exit();
+    if (previous == ScreenId::VarioBar) varioBarScreen_->exit();
     if (previous == ScreenId::AltitudeTrace) altitudeTraceScreen_->exit();
     if (previous == ScreenId::WindDirection) windDirectionScreen_->exit();
     if (previous == ScreenId::FlightMap) flightMapScreen_->exit();
@@ -135,6 +138,7 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (screen == ScreenId::StartUp) startupScreen_->enter();
     if (screen == ScreenId::PreTakeoff) preTakeoffScreen_->enter();
     if (screen == ScreenId::Variometer) variometerScreen_->enter();
+    if (screen == ScreenId::VarioBar) varioBarScreen_->enter();
     if (screen == ScreenId::AltitudeTrace) altitudeTraceScreen_->enter();
     if (screen == ScreenId::WindDirection) windDirectionScreen_->enter();
     if (screen == ScreenId::FlightMap) flightMapScreen_->enter();
@@ -239,6 +243,9 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         case ScreenId::Variometer:
             variometerScreen_->draw(*this, data);
             break;
+        case ScreenId::VarioBar:
+            varioBarScreen_->draw(*this, data);
+            break;
         case ScreenId::AltitudeTrace:
             altitudeTraceScreen_->draw(*this, data);
             break;
@@ -334,10 +341,10 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
             }
         }
     } else if (currentFlightState_ == FlightState::FLIGHT || currentFlightState_ == FlightState::TAKEOFF_DETECTED) {
-        static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::WindDirection,
-                                                 ScreenId::FlightMap, ScreenId::AltitudeTrace,
-                                                 ScreenId::Settings};
-        constexpr int count = 5;
+        static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::VarioBar,
+                                                 ScreenId::WindDirection, ScreenId::FlightMap,
+                                                 ScreenId::AltitudeTrace, ScreenId::Settings};
+        constexpr int count = 6;
         for (int i = 0; i < count; ++i) {
             if (inFlightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;

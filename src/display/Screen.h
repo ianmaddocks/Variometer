@@ -10,6 +10,7 @@ enum class ScreenId : uint8_t {
     StartUp,
     PreTakeoff,
     Variometer,
+    VarioBar,
     AltitudeTrace,
     WindDirection,
     FlightMap,

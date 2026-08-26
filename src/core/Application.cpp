@@ -571,6 +571,7 @@ void Application::updateFlightLogic() {
      */
     varioCalculator_.update(flightData_, altitudeSampleSeq_, altitudeSampleTimeMs_);
     flightData_.verticalSpeed = varioCalculator_.getVerticalSpeed();
+    flightData_.verticalSpeedAverage30s = varioCalculator_.getVerticalSpeedAverage30s();
     /*
      * Safe to call every pass: WindEstimator ingests a sample only when
      * GPS's position sequence changes, mirroring how the vario is fed
