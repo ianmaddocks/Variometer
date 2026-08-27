@@ -33,11 +33,11 @@ constexpr int I2C_SCL = D10;
  * At 100 kHz a full redraw took longer than DISPLAY_UPDATE_INTERVAL_MS,
  * so the main loop was permanently saturated by display traffic. Because
  * every other subsystem is polled once per loop pass, that starved the
- * MS5611 down to roughly 2.6 samples/second and made the vario erratic.
+ * barometer down to roughly 2.6 samples/second and made the vario erratic.
  * See VarioCalculator.cpp for why sample rate mattered so much.
  *
  * 400 kHz (I2C "fast mode") is supported by all three devices on this
- * bus: MS5611, SH1107 and the DuPPa encoder.
+ * bus: biometric sensor, SH1107 and the DuPPa encoder.
  */
 constexpr uint32_t I2C_CLOCK_HZ = 400000;
 
@@ -47,11 +47,14 @@ constexpr uint32_t I2C_CLOCK_HZ = 400000;
  * These two devices want opposite things, so the bus is re-clocked
  * around the display flush rather than run at one compromise speed.
  *
- * The MS5611 proved unreliable at 400 kHz on this wiring: address NACKs
- * (Wire error 2) on conversion commands, and multi-byte reads returning
- * 0xFF in the low bytes -- which corrupted both the calibration PROM and
- * the D2 temperature conversion. A corrupt D2 swings the computed
- * altitude by ~2000 m, which no amount of vario filtering can hide.
+ * The MS5611 this originally shipped with proved unreliable at 400 kHz
+ * on this wiring: address NACKs (Wire error 2) on conversion commands,
+ * and multi-byte reads returning 0xFF in the low bytes -- which corrupted
+ * both the calibration data and the temperature conversion, and a corrupt
+ * temperature swings the computed altitude by up to ~2000 m. The biometric
+ * sensor
+ * that replaced it has not been characterized on this wiring, so the same
+ * conservative 100 kHz sensor clock is kept until proven unnecessary.
  *
  * The SH1107 pushes 2048 bytes per refresh and is the only device that
  * genuinely needs the speed, so it keeps 400 kHz. setClock() only
@@ -156,8 +159,8 @@ constexpr uint32_t LINE_SPACING = 9;
 constexpr uint32_t ENCODER_I2C_ADDRESS = 0x01;
 constexpr uint8_t ENCODER_DOUBLE_PRESS_PERIOD = 50;
 
-constexpr uint32_t MS5611_UPDATE_INTERVAL_MS = 20;
-constexpr uint32_t MS5611_DEBUG_INTERVAL_MS = 5000;
+constexpr uint32_t BIOMETRIC_SENSOR_UPDATE_INTERVAL_MS = 20;
+constexpr uint32_t BIOMETRIC_SENSOR_DEBUG_INTERVAL_MS = 5000;
 
 /*
  * Interval for the consolidated HEALTH line.
@@ -248,8 +251,10 @@ constexpr uint32_t VARIO_AVERAGE_SAMPLE_INTERVAL_MS = 1000;
  *
  * Regression slope noise falls off very fast as the window grows --
  * roughly as T^-1.5 -- so the window length matters far more than the
- * smoothing filter that follows it. Using the MS5611's datasheet noise
- * at OSR 4096 (~0.1 m RMS of altitude):
+ * smoothing filter that follows it. Using the original MS5611's
+ * datasheet noise at OSR 4096 (~0.1 m RMS of altitude) -- the biometric sensor
+ * that replaced it has not been characterized on this wiring, so this
+ * window length is carried forward unchanged pending real-world data:
  *
  *   300 ms window  @ 20 Hz  ->  ~0.47 m/s of noise on the raw slope
  *  1000 ms window  @ 25 Hz  ->  ~0.07 m/s of noise on the raw slope

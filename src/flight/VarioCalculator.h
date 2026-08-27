@@ -55,10 +55,12 @@ private:
 
     /*
      * Must hold a full VARIO_REGRESSION_WINDOW_MS of samples at the
-     * fastest rate the sensor can deliver. The MS5611 needs one pressure
-     * plus one temperature conversion per reading (~40 ms at OSR 4096),
-     * so ~25 Hz; a 1000 ms window therefore needs ~25 entries. 40 gives
-     * headroom without meaningful memory cost (40 x 8 = 320 bytes).
+     * fastest rate the sensor can deliver. The barometer needs one
+     * pressure plus one temperature conversion per reading (~40 ms at the
+    * MS5611's OSR 4096, and the biometric sensor that replaced it is configured
+     * for a comparable ~40 ms cycle at OSR 8), so ~25 Hz; a 1000 ms window
+     * therefore needs ~25 entries. 40 gives headroom without meaningful
+     * memory cost (40 x 8 = 320 bytes).
      */
     static constexpr size_t HISTORY_SIZE = 40;
 

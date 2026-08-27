@@ -27,7 +27,7 @@ public:
     float getAltitude() const;
 
     /*
-     * Altitude sample handshake, mirroring MS5611Sensor's. Needed
+    * Altitude sample handshake, mirroring the biometric sensor's. Needed
      * because GPS altitude can be selected as the vario's altitude
      * source (see Config::ALTITUDE_SOURCE_GPS), and the vario must be
      * able to tell a genuinely new GGA fix from a repeat of the last one

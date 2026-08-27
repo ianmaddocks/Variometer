@@ -2,7 +2,7 @@
 
 #include "core/FlightData.h"
 #include "sensors/GPS.h"
-#include "sensors/MS5611Sensor.h"
+#include "sensors/BiometricSensor.h"
 #include "input/Encoder.h"
 #include "power/BatteryMonitor.h"
 #include "power/PowerManager.h"
@@ -36,7 +36,7 @@ private:
     DeviceSettings settings_;
     // NOTE: there is deliberately no lastGpsMs_ -- the GPS UART is
     // drained every loop pass. See Application::updateSensors().
-    uint32_t lastMs5611Ms_ = 0;
+    uint32_t lastBiometricSensorMs_ = 0;
     uint32_t lastBatteryMs_ = 0;
     uint32_t lastLogicMs_ = 0;
     uint32_t lastAudioMs_ = 0;
@@ -45,7 +45,7 @@ private:
     uint32_t lastTrackSampleMs_ = 0;
     uint32_t flightStartTimeMs_ = 0;
     GPS gps_;
-    MS5611Sensor ms5611_;
+    BiometricSensor biometricSensor_;
     Encoder encoder_;
     BatteryMonitor batteryMonitor_;
     PowerManager powerManager_;
@@ -77,8 +77,8 @@ private:
     uint32_t altitudeSampleSeq_ = 0;
     uint32_t altitudeSampleTimeMs_ = 0;
 
-    // Last MS5611 sequence seen, used to detect a fresh barometer sample.
-    uint32_t lastMs5611Seq_ = 0;
+    // Last biometric sensor sequence seen, used to detect a fresh sample.
+    uint32_t lastBiometricSensorSeq_ = 0;
 
 #ifdef ALTITUDE_SOURCE_GPS
     // Only used when altitude is sourced from GPS; see updateSensors().
@@ -111,10 +111,10 @@ private:
      * Altitude spread over the reporting interval.
      *
      * With the device stationary this is a direct measurement of sensor
-     * noise, and it settles the main open question cheaply: an MS5611 at
-     * OSR 4096 should hold roughly 0.1-0.3 m peak-to-peak. Metres of
-     * spread means the problem is upstream of the vario maths, and no
-     * amount of filter tuning will fix it.
+     * noise. The original MS5611 at OSR 4096 held roughly 0.1-0.3 m
+    * peak-to-peak; the biometric sensor has not yet been characterized here.
+     * Metres of spread means the problem is upstream of the vario maths,
+     * and no amount of filter tuning will fix it.
      */
     float altitudeMin_ = 0.0f;
     float altitudeMax_ = 0.0f;

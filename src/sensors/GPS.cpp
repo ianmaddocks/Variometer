@@ -107,14 +107,27 @@ void GPS::feedSerialSentence(const String& sentence) {
                 satellites_ = static_cast<uint8_t>(sats);
             }
             fix_ = quality > 0;
-            const float altitude = fields[9].toFloat();
-            if (!isnan(altitude) && altitude > -1000.0f) {
-                altitude_ = altitude;
 
-                // A GGA sentence is the sole source of GPS altitude, so
-                // this is exactly "a new altitude sample arrived".
-                altitudeSampleTimeMs_ = millis();
-                ++altitudeSampleSeq_;
+            /*
+             * Only treat the altitude field as a sample when the
+             * receiver actually has a fix AND populated the field.
+             *
+             * With no fix the field is empty, and toFloat() turns that
+             * into a perfectly plausible-looking 0.0 m that clears the
+             * range check below -- so the vario was being fed a
+             * rock-steady 0 m at the GGA rate and reported a confident
+             * 0.00 m/s rather than no data at all.
+             */
+            if (fix_ && fields[9].length() > 0) {
+                const float altitude = fields[9].toFloat();
+                if (!isnan(altitude) && altitude > -1000.0f) {
+                    altitude_ = altitude;
+
+                    // A GGA sentence is the sole source of GPS altitude, so
+                    // this is exactly "a new altitude sample arrived".
+                    altitudeSampleTimeMs_ = millis();
+                    ++altitudeSampleSeq_;
+                }
             }
             hasData_ = true;
         }

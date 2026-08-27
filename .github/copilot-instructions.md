@@ -3,7 +3,7 @@
 Create a robust, modular C++/PlatformIO firmware application for a handheld paramotor flight computer / variometer.  
 The project runs on a **Seeed Studio XIAO ESP32C3**.   
 The application combines:  
-* MS5611 barometric pressure sensor  
+* DPS310 barometric pressure sensor  
 * SH1107 128x128 OLED display  
 * DuPPA i2c encoder V2.1, with a tri-colour LED  
 * u-blox M10 GPS receiver  
@@ -37,7 +37,7 @@ These pin assignments are fixed and must not be changed without explicit instruc
 | Haptic control  | D2  |
   
 The three I2C devices share the same I2C bus:  
-1. MS5611  
+1. DPS310  
 2. SH1107 128x128 OLED  
 3. DuPPA i2c encoder V2.1  
 GPS uses a separate hardware serial connection.  
@@ -89,9 +89,9 @@ The GPS module should be abstracted behind a GPS class/interface so the rest of 
   
 ⸻  
   
-## MS5611  
-Use the MS5611 as the primary high-resolution altitude/variometer sensor.  
-The MS5611 is connected through I2C.  
+## DPS310  
+Use the DPS310 as the primary high-resolution altitude/variometer sensor. (This project originally shipped with an MS5611, migrated to a DPS310 -- see the "Known Regressions" section for the MS5611-specific history that is now historical rather than applicable to the current driver.)  
+The DPS310 is connected through I2C.  
 The firmware should:  
 * Initialise the sensor  
 * Read pressure  
@@ -100,7 +100,7 @@ The firmware should:
 * Calculate relative altitude  
 * Calculate vertical speed  
 * Filter the altitude signal appropriately for a variometer  
-The variometer calculation must be based primarily on the MS5611 rather than GPS altitude.  
+The variometer calculation must be based primarily on the DPS310 rather than GPS altitude.  
 GPS altitude may be used as supporting information but should not be the primary source for instantaneous climb/sink rate.  
 Avoid excessive filtering that creates unacceptable lag in the vario response.  
   
@@ -186,12 +186,12 @@ After that the screen should prominently show:
 Less prominently, at the bottom of the screen:  
 * “(c) Ian Maddocks 2026”   
 Where <min satellites> is configured by the user in the settings screen (defaulting to 5).   
-Once the minimum of satellites has been acquired the text should change to “Determining Altitude”. Once the MS5611 based altitude has settled and the minimum number of satellites has been reached, the screen should switch to pre-takeoff screen.   
+Once the minimum of satellites has been acquired the text should change to “Determining Altitude”. Once the DPS310 based altitude has settled and the minimum number of satellites has been reached, the screen should switch to pre-takeoff screen.   
 ⸻  
 ## Pre-takeoff  
 This screen should show   
 * current GPS long & latitude   
-* MS5611 altitude  
+* DPS310 altitude  
 * Date & time  
 * A “Ready” instructions, like the screen below   
   
@@ -511,7 +511,7 @@ At minimum show:
 * Satellites  
 * Update rate if available  
 * Min # satellites  
-## MS5611  
+## DPS310  
 * Pressure  
 * Temperature  
 * Barometric altitude  
@@ -561,8 +561,8 @@ src/
 │   └── SystemState.h
 │
 ├── sensors/
-│   ├── MS5611Sensor.h
-│   ├── MS5611Sensor.cpp
+│   ├── DPS310Sensor.h
+│   ├── DPS310Sensor.cpp
 │   ├── GPS.h
 │   └── GPS.cpp
 │
@@ -636,7 +636,7 @@ The application should have a structure broadly similar to:
 void loop()
 {
     updateGPS();
-    updateMS5611();
+    updateDPS310();
     updateEncoder();
     updateBattery();
 
@@ -697,7 +697,7 @@ Do not use tiny fonts for important flight information.
 Use different update rates for different systems.  
 For example:  
 * GPS: according to receiver update rate  
-* MS5611: high-rate sampling appropriate for variometer calculation  
+* DPS310: high-rate sampling appropriate for variometer calculation  
 * Vario calculation: high rate  
 * Display: approximately 10–20 FPS where practical  
 * Battery: relatively slow update  
@@ -731,7 +731,7 @@ If GPS fails:
 * Continue displaying barometric altitude and vario.  
 * Indicate GPS unavailable.  
 * Do not crash.  
-If MS5611 fails:  
+If DPS310 fails:  
 * Indicate sensor failure.  
 * Do not use invalid altitude/vario values.  
 If the encoder fails:  
@@ -795,7 +795,7 @@ Before adding a library, check whether PlatformIO already provides an appropriat
 Known required functionality:  
 * SH1107 OLED  
 * DuPPA i2c encoder  
-* MS5611  
+* DPS310  
 * GPS/NMEA parsing  
 Do not introduce unnecessary libraries.  
 For the DuPPA encoder specifically, use:  
@@ -841,7 +841,7 @@ Create:
 Confirm compilation.  
 ## Phase 2 — Hardware drivers  
 Implement and test:  
-* MS5611  
+* DPS310  
 * SH1107  
 * DuPPA encoder  
 * GPS  
@@ -910,7 +910,7 @@ The following changes were tried, caused a real regression, and were reverted (s
 
 **Fixed properly**: `updateScreenSelection()` now runs the StartUp → PreTakeoff transition *before* the `manualSelectionActive_` guard (it's checked unconditionally whenever `activeScreen_ == ScreenId::StartUp` and GPS is locked, with an early `return`), so a prior encoder touch can no longer block it. `preflightOrder[]` now correctly contains `PreTakeoff` again, matching the spec. If StartUp/PreTakeoff navigation ever seems stuck again, check that ordering in `updateScreenSelection()` first — the fix depends on the auto-transition check running *before*, not after, the `manualSelectionActive_` guard.
 
-### MS5611 pressure formula: the final `>>15` applies to the whole expression, not just `OFF`  
+### MS5611 pressure formula: the final `>>15` applies to the whole expression, not just `OFF` — HISTORICAL, MS5611-specific  
 Per the MS5611 datasheet, `P = (D1*SENS/2^21 - OFF) / 2^15` — the `>>15` must be applied after subtracting `OFF`, not only to `OFF` on its own. A change once rewrote this in `MS5611Sensor.cpp` as:  
 ```
 (((raw * SENS) >> 21)) - (OFF >> 15)
@@ -919,7 +919,10 @@ which produces incorrect pressure/altitude values. The correct form, restored by
 ```
 (((raw * SENS) >> 21) - OFF) >> 15
 ```  
-Keep the comment explaining this next to the code — it's exactly the kind of thing that looks like a harmless refactor.
+This project has since migrated from the MS5611 to a DPS310 (`MS5611Sensor.h/.cpp` deleted, replaced by `DPS310Sensor.h/.cpp`), which uses an entirely different compensation formula with no equivalent bit-shift pitfall — this entry is kept for the general lesson (a small, plausible-looking rewrite of a compensation formula can silently corrupt every reading) rather than because the code still exists.
+
+### DPS310 register map, calibration bit-packing and compensation formula are UNVERIFIED  
+`DPS310Sensor.cpp`'s register addresses, calibration-coefficient bit-packing (the 0x10–0x21 nibble layout), scale-factor table (kP/kT), and compensation formula were written from training-data recollection during the MS5611→DPS310 migration, not checked against an actual datasheet PDF or real hardware. Given the exact class of bug documented above (MS5607 coefficients used in an MS5611 driver), treat this driver's numeric constants as unverified until bench-tested against a known-good altitude reference. If altitude looks plausible but is offset or scaled wrong, suspect the coefficient bit-packing or scale factor first.
 
 ⸻  
   
@@ -967,7 +970,7 @@ The firmware is considered complete when:
 * Encoder rotates through screens.  
 * Encoder button works.  
 * Long encoder press enters Power Off.  
-* MS5611 produces stable altitude and vertical-speed data.  
+* DPS310 produces stable altitude and vertical-speed data.  
 * Takeoff is automatically detected.  
 * LZ is automatically saved.  
 * Vario screen displays climb/sink information.  
@@ -980,7 +983,7 @@ The firmware is considered complete when:
 * Current position shows direction of travel.  
 * Distance to LZ is displayed.  
 * Altitude trace works.  
-* Settings screen provides GPS/MS5611 diagnostics.  
+* Settings screen provides GPS/DPS310 diagnostics.  
 * Battery and satellite indicators work.  
 * The application remains operational if an individual peripheral becomes unavailable.  
 * No blocking delays interfere with GPS, sensor or UI processing.  

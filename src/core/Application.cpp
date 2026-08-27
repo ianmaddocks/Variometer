@@ -11,7 +11,7 @@ namespace variometer {
 
 Application::Application()
     : gps_(),
-      ms5611_(),
+    biometricSensor_(),
       encoder_(),
       batteryMonitor_(),
       buzzer_(),
@@ -42,7 +42,7 @@ void Application::begin() {
     scanI2cBus();
 
     gps_.begin();
-    ms5611_.begin();
+    biometricSensor_.begin();
     encoder_.begin();
     batteryMonitor_.begin();
     powerManager_.begin();
@@ -84,7 +84,7 @@ void Application::scanI2cBus() {
             const char* name = "unknown";
 
             if (address == 0x76 || address == 0x77) {
-                name = "MS5611";
+                name = "biometricSensor";
             } else if (address == 0x3C || address == 0x3D) {
                 name = "SH1107 OLED";
             } else if (address == Config::ENCODER_I2C_ADDRESS) {
@@ -119,7 +119,7 @@ void Application::noteAltitudeSample(float altitude) {
 }
 
 void Application::reportHealth() {
-    const MS5611Sensor::Counters& baro = ms5611_.getCounters();
+    const BiometricSensor::Counters& baro = biometricSensor_.getCounters();
 
     const uint32_t elapsedMs =
         (lastHealthMs_ == 0) ? Config::HEALTH_REPORT_INTERVAL_MS
@@ -159,15 +159,15 @@ void Application::reportHealth() {
          static_cast<unsigned long>(baro.readFail),
          static_cast<unsigned long>(baro.rangeReject),
          static_cast<unsigned long>(baro.tempReject),
-         ms5611_.getLastI2cError(),
-         ms5611_.hasValidPromCrc() ? "OK" : "BAD",
+         biometricSensor_.getLastI2cError(),
+         biometricSensor_.hasValidCalibration() ? "OK" : "BAD",
          static_cast<double>(altitudeSampleCount_) / seconds,
          static_cast<double>(altitudeSpreadValid_ ? (altitudeMax_ - altitudeMin_) : 0.0f),
          flightData_.verticalSpeed,
          static_cast<unsigned long>(ESP.getFreeHeap()));
 
     // Reset for the next interval so every line reports a rate.
-    ms5611_.resetCounters();
+    biometricSensor_.resetCounters();
     loopCount_ = 0;
     loopMaxUs_ = 0;
     loopSumUs_ = 0;
@@ -241,8 +241,8 @@ void Application::loop() {
      * connected, so this costs nothing extra on top of the check it was
      * already going to do.
      */
-    bleTelemetry_.update(flightData_, gps_.getUtcDateTime(), ms5611_.isValid(),
-                         ms5611_.getPressure(), ms5611_.getTemperature());
+    bleTelemetry_.update(flightData_, gps_.getUtcDateTime(), biometricSensor_.isValid(),
+                         biometricSensor_.getPressure(), biometricSensor_.getTemperature());
 
     if (now - lastAudioMs_ >= 20) {
         updateAudio();
@@ -315,9 +315,9 @@ void Application::updateSensors() {
      */
     gps_.update();
 
-    if (now - lastMs5611Ms_ >= Config::MS5611_UPDATE_INTERVAL_MS) {
-        ms5611_.update();
-        lastMs5611Ms_ = now;
+    if (now - lastBiometricSensorMs_ >= Config::BIOMETRIC_SENSOR_UPDATE_INTERVAL_MS) {
+        biometricSensor_.update();
+        lastBiometricSensorMs_ = now;
     }
 
     if (now - lastBatteryMs_ >= Config::BATTERY_UPDATE_INTERVAL_MS) {
@@ -405,7 +405,7 @@ void Application::updateSensors() {
 #ifdef ALTITUDE_SOURCE_GPS
     /*
      * Altitude/vario sourced from the GPS's own GGA fix instead of the
-     * MS5611.
+     * barometer.
      *
      * Selected at compile time via Config::ALTITUDE_SOURCE_GPS (see
      * platformio.ini) so the rest of the flight logic -- vario filter,
@@ -417,7 +417,7 @@ void Application::updateSensors() {
      * runtime, so there is no risk of silently flying on it.
      */
     } else if (gps_.hasData()) {
-        // Mirrors MS5611Sensor's own behaviour: establish a reference on
+        // Mirrors the biometric sensor's own behaviour: establish a reference on
         // the first valid reading so relativeAltitude reads sensibly
         // during preflight, before setTakeoffReference()'s equivalent
         // below overwrites it at takeoff.
@@ -430,7 +430,7 @@ void Application::updateSensors() {
         flightData_.relativeAltitude =
             gps_.getAltitude() - gpsAltitudeReference_;
 
-        // Same handshake pattern as the MS5611 path below: only feed the
+        // Same handshake pattern as the biometric sensor path below: only feed the
         // vario a sample when a new GGA fix has actually arrived.
         const uint32_t gpsSeq = gps_.getAltitudeSampleSequence();
 
@@ -441,9 +441,9 @@ void Application::updateSensors() {
             noteAltitudeSample(flightData_.barometricAltitude);
         }
 #else
-    } else if (ms5611_.isValid()) {
-        flightData_.barometricAltitude = ms5611_.getAltitude();
-        flightData_.relativeAltitude = ms5611_.getRelativeAltitude();
+    } else if (biometricSensor_.isValid()) {
+        flightData_.barometricAltitude = biometricSensor_.getAltitude();
+        flightData_.relativeAltitude = biometricSensor_.getRelativeAltitude();
 
         /*
          * Forward the barometer's own sample handshake to the vario.
@@ -453,11 +453,11 @@ void Application::updateSensors() {
          * poll interval ago, and feeding the readout time into the
          * regression added that error to every sample.
          */
-        const uint32_t sensorSeq = ms5611_.getSampleSequence();
+        const uint32_t sensorSeq = biometricSensor_.getSampleSequence();
 
-        if (sensorSeq != lastMs5611Seq_) {
-            lastMs5611Seq_ = sensorSeq;
-            altitudeSampleTimeMs_ = ms5611_.getSampleTimeMs();
+        if (sensorSeq != lastBiometricSensorSeq_) {
+            lastBiometricSensorSeq_ = sensorSeq;
+            altitudeSampleTimeMs_ = biometricSensor_.getSampleTimeMs();
             ++altitudeSampleSeq_;
             noteAltitudeSample(flightData_.barometricAltitude);
         }
@@ -610,7 +610,7 @@ void Application::initializeFlightSession() {
 #ifdef ALTITUDE_SOURCE_GPS
     gpsAltitudeReference_ = gps_.getAltitude();
 #else
-    ms5611_.setTakeoffReference();
+    biometricSensor_.setTakeoffReference();
 #endif
 
     // Discard pre-flight altitude samples so the first
