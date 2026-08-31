@@ -4,9 +4,11 @@
 #include "sensors/GPS.h"
 #include "sensors/BiometricSensor.h"
 #include "input/Encoder.h"
+#include "input/PushButton.h"
 #include "power/BatteryMonitor.h"
 #include "power/PowerManager.h"
 #include "audio/Buzzer.h"
+#include "haptics/Haptic.h"
 #include "flight/FlightDetector.h"
 #include "flight/VarioCalculator.h"
 #include "flight/WindEstimator.h"
@@ -47,9 +49,15 @@ private:
     GPS gps_;
     BiometricSensor biometricSensor_;
     Encoder encoder_;
+    // SW1: hardware replacement for the encoder's double-push (DPUSH).
+    // SW2: alternative, hardware-button takeoff trigger alongside the
+    // GPS-speed-based FlightDetector::update() path.
+    PushButton sw1Button_;
+    PushButton sw2Button_;
     BatteryMonitor batteryMonitor_;
     PowerManager powerManager_;
     Buzzer buzzer_;
+    Haptic haptic_;
     FlightDetector flightDetector_;
     VarioCalculator varioCalculator_;
     WindEstimator windEstimator_;

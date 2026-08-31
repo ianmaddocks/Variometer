@@ -1,3 +1,4 @@
+#include "config/config.h"
 #include "display/DisplayManager.h"
 
 #include <Arduino.h>
@@ -15,7 +16,6 @@
 
 namespace variometer {
 namespace {
-constexpr uint32_t kLogIntervalMs = 1000;
 constexpr int16_t kStatusY = 12;
 
 const char* stateName(FlightState state) {
@@ -333,12 +333,26 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
          */
         static const ScreenId preflightOrder[] = {ScreenId::PreTakeoff, ScreenId::Settings, ScreenId::PowerOff};
         constexpr int count = 3;
+        bool found = false;
         for (int i = 0; i < count; ++i) {
             if (preflightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
                 nextScreen = preflightOrder[nextIndex];
+                found = true;
                 break;
             }
+        }
+        /*
+         * activeScreen_ is StartUp (still waiting for GPS lock), which
+         * is deliberately absent from preflightOrder[] -- see the
+         * comment above. Without this, rotating the encoder before
+         * lock matched nothing and silently did nothing, making
+         * Settings unreachable until GPS locked. Enter the ring from
+         * either end depending on rotation direction instead of forcing
+         * the pilot to wait for lock just to change a setting.
+         */
+        if (!found) {
+            nextScreen = (delta > 0) ? preflightOrder[0] : preflightOrder[count - 1];
         }
     } else if (currentFlightState_ == FlightState::FLIGHT || currentFlightState_ == FlightState::TAKEOFF_DETECTED) {
         static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::VarioBar,
@@ -425,7 +439,7 @@ void DisplayManager::update(const FlightData& data) {
     updateScreenSelection(data);
     drawCurrentScreen(data);
 
-    if (now - lastLogMs >= kLogIntervalMs) {
+    if (now - lastLogMs >= Config::STATE_LOG_INTERVAL_MS) {
         DBGF("State=%s screen=%d sats=%u speed=%.1fkm/h vario=%.2fm/s batt=%.0f%%\n",
              stateName(data.flightState),
              static_cast<int>(activeScreen_),

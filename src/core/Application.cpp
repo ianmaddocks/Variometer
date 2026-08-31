@@ -44,6 +44,8 @@ void Application::begin() {
     gps_.begin();
     biometricSensor_.begin();
     encoder_.begin();
+    sw1Button_.begin(Config::SW1_PIN, "SW1");
+    sw2Button_.begin(Config::SW2_PIN, "SW2");
     batteryMonitor_.begin();
     powerManager_.begin();
     buzzer_.begin();
@@ -60,6 +62,12 @@ void Application::begin() {
     // Buzzer defaults to disabled inside the driver; without this it never sounds.
     buzzer_.setEnabled(settings_.audioVarioEnabled);
     buzzer_.playStartupTune();
+
+    // Haptic motor shares D0 with the (now disabled) buzzer -- see
+    // Buzzer.cpp -- and is the only ascent/descent feedback actually
+    // wired up on this board.
+    haptic_.begin();
+    haptic_.setEnabled(settings_.hapticVarioEnabled);
 
     // BLE stack init is independent of the I2C bus and sensors above, so
     // it does not need to sit before or after any of that setup.
@@ -188,6 +196,8 @@ void Application::loop() {
 #endif
 
     encoder_.update();
+    sw1Button_.update();
+    sw2Button_.update();
 
     if (encoder_.wasPressed()) {
         display_.handleButtonPress();
@@ -209,20 +219,38 @@ void Application::loop() {
         }
     }
 
-    if (display_.isPowerOffScreen() && encoder_.consumeDoublePress()) {
+    /*
+     * SW2: dedicated hardware takeoff button, an alternative to the
+     * GPS-speed-based detection in FlightDetector::update() and to the
+     * encoder press above. Not tied to any particular screen -- it is a
+     * physical switch, not a UI gesture -- so it only needs to check
+     * flight state.
+     */
+    if (sw2Button_.wasPressed() && flightData_.flightState == FlightState::PREFLIGHT) {
+        DBGLN("Takeoff requested via SW2");
+        flightDetector_.requestTakeoff();
+    }
+
+    // SW1: hardware stand-in for the encoder's double-push (DPUSH), so
+    // every consumeDoublePress()/wasDoublePressed() site below also
+    // fires on a SW1 press.
+    const bool doublePressEvent = encoder_.consumeDoublePress() || sw1Button_.wasPressed();
+
+    if (display_.isPowerOffScreen() && doublePressEvent) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        DBGLN("Power-off sequence initiated by long button press on Power Off screen");
+        DBGLN("Power-off sequence initiated by double press on Power Off screen");
     }
 
 #ifdef DEBUG
     // Debug/test-only: double-press anywhere swaps in a scripted GPS feed.
     // Deliberately excluded from release builds so it can't be triggered
     // by an accidental double-press in flight.
-    if (encoder_.wasDoublePressed()) {
+    if (encoder_.wasDoublePressed() || sw1Button_.wasPressed()) {
         gps_.enableMockFeed();
     }
 #endif
+
 
     if (encoder_.getDelta() != 0) {
         display_.handleEncoderDelta(encoder_.getDelta());
@@ -586,6 +614,8 @@ void Application::updateFlightLogic() {
 void Application::updateAudio() {
     buzzer_.update();
     buzzer_.updateVarioFeedback(flightData_.verticalSpeed);
+    haptic_.update();
+    haptic_.updateVarioFeedback(flightData_.verticalSpeed);
 }
 
 void Application::initializeFlightSession() {

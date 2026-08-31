@@ -66,12 +66,19 @@ constexpr uint32_t I2C_CLOCK_HZ = 400000;
  */
 constexpr uint32_t I2C_CLOCK_SENSORS_HZ = 100000;
 constexpr uint32_t I2C_CLOCK_DISPLAY_HZ = 400000;
-constexpr int GPS_RX = D8;
-constexpr int GPS_TX = D7;
+constexpr int GPS_RX = D5;
+constexpr int GPS_TX = D4;
 constexpr uint32_t GPS_BAUD = 115200;
 constexpr int BATTERY_PIN = A1;
-constexpr int BUZZER_PIN = D0;
-constexpr int HAPTIC_PIN = D2;
+//constexpr int BUZZER_PIN = D0;
+constexpr int HAPTIC_PIN = D0;
+constexpr int SW1_PIN = D6;
+constexpr int SW2_PIN = D7;
+
+// Debounce window for SW1/SW2, which unlike the encoder have no
+// hardware antibouncing of their own.
+constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
+
 constexpr uint32_t POWER_OFF_HOLD_MS = 2000;
 
 // Delay between a confirmed power-off request and actually entering deep
@@ -170,7 +177,8 @@ constexpr uint32_t BIOMETRIC_SENSOR_DEBUG_INTERVAL_MS = 5000;
  * blocking serial write each time at 115200 baud, which perturbs the
  * very loop timing being measured.
  */
-constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 5000;
+constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 1000;
+constexpr uint32_t STATE_LOG_INTERVAL_MS = 1000;
 
 /*
  * Per-sample vario trace.
