@@ -199,7 +199,15 @@ void Application::loop() {
     sw1Button_.update();
     sw2Button_.update();
 
+    // SW1/SW2 get the same haptic acknowledgement as the encoder press
+    // below, independent of whatever action (if any) the press below
+    // ends up triggering.
+    if (sw1Button_.wasPressed() || sw2Button_.wasPressed()) {
+        haptic_.triggerPulse(Config::HAPTIC_BUTTON_PULSE_MS);
+    }
+
     if (encoder_.wasPressed()) {
+        haptic_.triggerPulse(Config::HAPTIC_BUTTON_PULSE_MS);
         display_.handleButtonPress();
 
         /*

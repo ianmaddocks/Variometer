@@ -19,6 +19,7 @@ public:
     void setEnabled(bool enabled);
     bool isEnabled() const { return enabled_; }
     void update();
+    void triggerPulse(uint32_t durationMs);
     void updateVarioFeedback(float verticalSpeed);
 
 private:

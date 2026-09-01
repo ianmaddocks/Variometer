@@ -24,7 +24,7 @@ struct DeviceSettings {
 
     // Playback rate for the post-flight 3D replay, as a multiple of real
     // time. 3x replays a typical flight in a reviewable length of time.
-    uint8_t replaySpeed = 3;
+    uint8_t replaySpeed = 4;
 };
 
 struct FlightData {

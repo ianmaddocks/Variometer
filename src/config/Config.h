@@ -78,6 +78,7 @@ constexpr int SW2_PIN = D7;
 // Debounce window for SW1/SW2, which unlike the encoder have no
 // hardware antibouncing of their own.
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
+constexpr uint32_t HAPTIC_BUTTON_PULSE_MS = 300;
 
 constexpr uint32_t POWER_OFF_HOLD_MS = 2000;
 

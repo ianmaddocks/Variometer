@@ -18,8 +18,7 @@ constexpr float kVarioFeedbackThreshold = 0.6f;
 void Haptic::begin() {
     pinMode(Config::HAPTIC_PIN, OUTPUT);
     digitalWrite(Config::HAPTIC_PIN, LOW);
-    enabled_ = false;
-    pulseState_ = PulseState::Idle;
+    enabled_ = true;
 }
 
 void Haptic::setEnabled(bool enabled) {
@@ -43,6 +42,16 @@ void Haptic::update() {
     pulseState_ = PulseState::Idle;
 }
 
+void Haptic::triggerPulse(uint32_t durationMs) {
+    if (!enabled_) {
+        return;
+    }
+
+    digitalWrite(Config::HAPTIC_PIN, HIGH);
+    pulseOffMs_ = millis() + durationMs;
+    pulseState_ = PulseState::On;
+}
+
 void Haptic::updateVarioFeedback(float verticalSpeed) {
     if (!enabled_) {
         return;
@@ -62,9 +71,7 @@ void Haptic::updateVarioFeedback(float verticalSpeed) {
         return;
     }
 
-    digitalWrite(Config::HAPTIC_PIN, HIGH);
-    pulseOffMs_ = now + pulseMs;
-    pulseState_ = PulseState::On;
+    triggerPulse(pulseMs);
     lastVarioFeedbackMs_ = now;
 }
 
