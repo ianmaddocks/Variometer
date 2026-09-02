@@ -65,6 +65,11 @@ struct FlightData {
     float traceAltitudeMax = 0.0f;
     float traceAltitudeSpan = 0.0f;
     FlightState flightState = FlightState::PREFLIGHT;
+
+    // Manual SW1-triggered raw data capture (independent of flightState),
+    // for the on-screen recording indicator.
+    bool recordingActive = false;
+    uint32_t recordingDurationS = 0;
 };
 
 }  // namespace variometer

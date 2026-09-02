@@ -43,6 +43,18 @@ void FlightLogStorage::begin() {
     WiFi.mode(WIFI_AP);
     WiFi.softAP(Config::WIFI_AP_SSID, Config::WIFI_AP_PASSWORD, Config::WIFI_AP_CHANNEL);
 
+    /*
+     * Modem sleep is on by default and is the classic cause of an ESP32
+     * softAP download that stalls for many seconds at a time despite the
+     * file being tiny (see the 25KB-takes-a-minute report that prompted
+     * this): the radio powers down between beacons/packets, so every
+     * write from streamFile() below can sit queued for a full sleep
+     * interval before it actually goes out. There is exactly one client
+     * (the pilot's phone/laptop) and no other traffic to save power for,
+     * so there is no upside to leaving sleep enabled here.
+     */
+    WiFi.setSleep(false);
+
     server_ = &webServer;
     webServer.on("/", HTTP_GET, [this]() { handleWebRequest(); });
     webServer.on("/download", HTTP_GET, [this]() { handleWebRequest(); });
@@ -82,19 +94,22 @@ bool FlightLogStorage::startFlight(const GPS::DateTime& startTime) {
         activePath_ = "";
         return false;
     }
-    activeFile_.println("time_seconds,altitude_m,latitude,longitude");
+    activeFile_.println(
+        "time_seconds,altitude_m,latitude,longitude,speed_kmh,satellites,gps_fix,pressure_hpa,temperature_c");
     activeFile_.flush();
     lastFlushMs_ = millis();
     active_ = true;
     return true;
 }
 
-void FlightLogStorage::appendPoint(const TracePoint& point) {
+void FlightLogStorage::appendPoint(const LogSample& point) {
     if (!active_) {
         return;
     }
-    activeFile_.printf("%.3f,%.3f,%.7f,%.7f\n", point.timeSeconds, point.altitude,
-                       point.latitude, point.longitude);
+    activeFile_.printf("%.3f,%.3f,%.7f,%.7f,%.1f,%u,%u,%.2f,%.2f\n", point.timeSeconds,
+                       point.altitude, point.latitude, point.longitude, point.groundSpeedKmh,
+                       static_cast<unsigned>(point.satellites), point.gpsFix ? 1 : 0,
+                       point.pressureHpa, point.temperatureC);
 }
 
 void FlightLogStorage::finishFlight(uint32_t durationSeconds) {
@@ -155,6 +170,10 @@ void FlightLogStorage::handleWebRequest() {
             webServer.send(404, "text/plain", "Log not found");
             return;
         }
+        // Disable Nagle on this connection: batched with delayed ACK on
+        // the client side, Nagle can add tens of ms of stall per write,
+        // which streamFile()'s many small chunks turn into a slow trickle.
+        webServer.client().setNoDelay(true);
         webServer.streamFile(file, "text/csv");
         file.close();
         return;

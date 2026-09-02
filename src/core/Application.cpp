@@ -49,9 +49,7 @@ void Application::begin() {
     batteryMonitor_.begin();
     powerManager_.begin();
     buzzer_.begin();
-#ifdef NDEBUG
     flightLogStorage_.begin();
-#endif
     display_.begin();
     display_.setPowerManager(&powerManager_);
     display_.setRecorder(&flightRecorder_);
@@ -191,9 +189,7 @@ void Application::loop() {
     const uint32_t loopStartUs = micros();
     const uint32_t now = millis();
 
-#ifdef NDEBUG
     flightLogStorage_.update();
-#endif
 
     encoder_.update();
     sw1Button_.update();
@@ -204,6 +200,16 @@ void Application::loop() {
     // ends up triggering.
     if (sw1Button_.wasPressed() || sw2Button_.wasPressed()) {
         haptic_.triggerPulse(Config::HAPTIC_BUTTON_PULSE_MS);
+    }
+
+    // SW1: dedicated start/stop for the raw data-capture log (2 Hz,
+    // GPS + barometer), independent of the takeoff/landing flight-state
+    // machine below. This is SW1's only role now -- it used to also
+    // stand in for the encoder's double-push (power-off confirm, debug
+    // mock GPS toggle); those now go through the encoder alone so a
+    // single SW1 press has one unambiguous meaning.
+    if (sw1Button_.wasPressed()) {
+        toggleManualRecording();
     }
 
     if (encoder_.wasPressed()) {
@@ -239,10 +245,10 @@ void Application::loop() {
         flightDetector_.requestTakeoff();
     }
 
-    // SW1: hardware stand-in for the encoder's double-push (DPUSH), so
-    // every consumeDoublePress()/wasDoublePressed() site below also
-    // fires on a SW1 press.
-    const bool doublePressEvent = encoder_.consumeDoublePress() || sw1Button_.wasPressed();
+    // Double-push (DPUSH) is now the encoder alone -- SW1 was reassigned
+    // above as the dedicated recording start/stop button and no longer
+    // stands in here.
+    const bool doublePressEvent = encoder_.consumeDoublePress();
 
     if (display_.isPowerOffScreen() && doublePressEvent) {
         powerManager_.requestPowerOff();
@@ -251,10 +257,11 @@ void Application::loop() {
     }
 
 #ifdef DEBUG
-    // Debug/test-only: double-press anywhere swaps in a scripted GPS feed.
-    // Deliberately excluded from release builds so it can't be triggered
-    // by an accidental double-press in flight.
-    if (encoder_.wasDoublePressed() || sw1Button_.wasPressed()) {
+    // Debug/test-only: double-press anywhere, or a SW2 press, swaps in a
+    // scripted GPS feed. Deliberately excluded from release builds so it
+    // can't be triggered by an accidental press in flight. SW1 no longer
+    // triggers this -- it is the dedicated recording button now.
+    if (encoder_.wasDoublePressed() || sw2Button_.wasPressed()) {
         gps_.enableMockFeed();
     }
 #endif
@@ -359,6 +366,15 @@ void Application::updateSensors() {
     if (now - lastBatteryMs_ >= Config::BATTERY_UPDATE_INTERVAL_MS) {
         batteryMonitor_.update();
         lastBatteryMs_ = now;
+    }
+
+    flightData_.recordingActive = manualRecordingActive_;
+    flightData_.recordingDurationS =
+        manualRecordingActive_ ? (now - manualRecordingStartMs_) / 1000 : 0;
+
+    if (manualRecordingActive_ && now - lastRawLogSampleMs_ >= Config::MANUAL_LOG_SAMPLE_INTERVAL_MS) {
+        lastRawLogSampleMs_ = now;
+        sampleManualRecording();
     }
 
     if (gps_.hasData()) {
@@ -509,7 +525,9 @@ void Application::updateSensors() {
                                  static_cast<float>(now) / 1000.0f,
                                  flightData_.latitude,
                                  flightData_.longitude);
-        flightLogStorage_.appendPoint(flightRecorder_.at(flightRecorder_.size() - 1));
+        // Persistent CSV capture is now driven separately, by SW1 (see
+        // sampleManualRecording()) -- this recorder only feeds the
+        // in-RAM altitude trace/chart (AltitudeTraceScreen).
         lastTraceSampleMs_ = now;
 
         /*
@@ -595,9 +613,6 @@ void Application::updateFlightLogic() {
         initializeFlightSession();
         buzzer_.playTakeoffTone();
     }
-    if (previousState != FlightState::POST_FLIGHT && detectorState == FlightState::POST_FLIGHT) {
-        flightLogStorage_.finishFlight(flightData_.flightDuration);
-    }
     flightData_.flightState = detectorState;
 
     /*
@@ -655,9 +670,9 @@ void Application::initializeFlightSession() {
     // flight vario calculation starts cleanly.
     varioCalculator_.reset();
 
-    if (!flightLogStorage_.startFlight(gps_.getUtcDateTime())) {
-        DBGLN("Unable to start persistent flight log");
-    }
+    // Note: the persistent flight-log capture is no longer tied to
+    // takeoff/landing detection here -- it is started/stopped explicitly
+    // by SW1. See Application::toggleManualRecording().
 
     lastTraceSampleMs_ = millis() - Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS;
     flightStartTimeMs_ = millis();
@@ -679,6 +694,37 @@ float Application::calculateDistanceFromLz(float latitude, float longitude) cons
     // drift apart; this was previously an inline copy of the haversine.
     return geo::distanceKm(latitude, longitude,
                            flightData_.lzLatitude, flightData_.lzLongitude);
+}
+
+void Application::toggleManualRecording() {
+    if (!manualRecordingActive_) {
+        if (!flightLogStorage_.startFlight(gps_.getUtcDateTime())) {
+            DBGLN("SW1: unable to start flight log capture");
+            return;
+        }
+        manualRecordingActive_ = true;
+        manualRecordingStartMs_ = millis();
+        lastRawLogSampleMs_ = 0;
+        DBGLN("SW1: recording started");
+    } else {
+        flightLogStorage_.finishFlight((millis() - manualRecordingStartMs_) / 1000);
+        manualRecordingActive_ = false;
+        DBGLN("SW1: recording stopped");
+    }
+}
+
+void Application::sampleManualRecording() {
+    LogSample sample;
+    sample.timeSeconds = static_cast<float>(millis() - manualRecordingStartMs_) / 1000.0f;
+    sample.altitude = flightData_.barometricAltitude;
+    sample.latitude = flightData_.latitude;
+    sample.longitude = flightData_.longitude;
+    sample.groundSpeedKmh = flightData_.groundSpeed * 3.6f;
+    sample.satellites = flightData_.satellites;
+    sample.gpsFix = flightData_.gpsFix;
+    sample.pressureHpa = biometricSensor_.getPressure() / 100.0f;
+    sample.temperatureC = biometricSensor_.getTemperature();
+    flightLogStorage_.appendPoint(sample);
 }
 
 void Application::updateDisplay() {

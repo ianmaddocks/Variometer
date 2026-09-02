@@ -30,10 +30,6 @@ constexpr float kBarPxPerMs = (kBarH / 2.0f) / Config::VARIO_BAR_SCALE_MS;  // 7
 // Numeric block
 constexpr int16_t kBigRight = 124;
 constexpr int16_t kBigBaseline = 66;
-constexpr int16_t kInvX = 20;
-constexpr int16_t kInvY = 26;
-constexpr int16_t kInvW = 106;
-constexpr int16_t kInvH = 46;
 
 // Average row
 constexpr int16_t kAvgBaseline = 88;
@@ -211,21 +207,20 @@ void VarioBarScreen::drawBar(DisplayManager& display, const FlightData& data) co
 }
 
 /*
- * Big instantaneous climb figure, with the invert-on-sink block behind
- * it, plus the "AVG"/value/"m/s" row below.
+ * Big instantaneous climb figure, plus the "AVG"/value/"m/s" row below.
+ *
+ * A strong-sink inversion (solid white panel behind the figure, text
+ * flipped to black) used to live here; removed because on this screen's
+ * left-hand climb/sink bar is the sink indicator, and the panel -- at
+ * ~30% of the screen -- read as a rendering glitch rather than a UI
+ * element on top of it.
  */
 void VarioBarScreen::drawNumeric(DisplayManager& display, const FlightData& data) const {
     char buf[12];
     const float climb = applyDeadBand(data.verticalSpeed);
-    const bool invert = (climb < Config::VARIO_BAR_INVERT_BELOW_MS);
-
-    if (invert) {
-        display.display().fillRect(kInvX, kInvY, kInvW, kInvH, SH110X_WHITE);
-    }
 
     formatSigned(buf, sizeof(buf), clampToScale(climb));
-    drawRight(display, kBigRight, kBigBaseline, kBigFigureSize, buf,
-             invert ? SH110X_BLACK : SH110X_WHITE);
+    drawRight(display, kBigRight, kBigBaseline, kBigFigureSize, buf, SH110X_WHITE);
 
     display.display().setTextColor(SH110X_WHITE);
     display.display().setTextSize(kLabelSize);

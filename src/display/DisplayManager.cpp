@@ -54,11 +54,48 @@ void drawSignalBars(SimpleDisplay& display, uint8_t satellites, int16_t x, int16
     }
 }
 
-void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data) {
-    drawSignalBars(display, data.satellites, 106-(Config::MIN_SATELLITES_DEFAULT*3), kStatusY-6);
-    drawBatteryIcon(display, data.batteryPercent, 108, kStatusY-12);
+void drawRecordingIndicator(SimpleDisplay& display, const FlightData& data) {
+    // Blinking dot + mm:ss, replacing the signal-bar/battery corner while
+    // a manual SW1 capture is running -- those two are the least useful
+    // thing to see mid-recording, and every screen already uses x<70 for
+    // its own header text (see the setCursor(0, 1) calls across the
+    // Screen implementations), so this is the one collision-free spot.
+    char buf[16];
+    const uint32_t s = data.recordingDurationS;
+    snprintf(buf, sizeof(buf), "REC %lu:%02lu",
+             static_cast<unsigned long>(s / 60), static_cast<unsigned long>(s % 60));
+    display.setTextSize(1);
+    display.setCursor(70, 2);
+    display.print(buf);
+    if ((millis() / 500) % 2 == 0) {
+        display.fillCircle(66, 5, 2, SH110X_WHITE);
+    }
+}
+
+void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data, ScreenId activeScreen) {
+    if (data.recordingActive) {
+        drawRecordingIndicator(display, data);
+    } else {
+        drawSignalBars(display, data.satellites, 106-(Config::MIN_SATELLITES_DEFAULT*3), kStatusY-6);
+        drawBatteryIcon(display, data.batteryPercent, 108, kStatusY-12);
+    }
     display.drawLine(0, 11, 128, 11, SH110X_WHITE);
 #ifdef DEBUG
+    /*
+     * VarioBar owns the bottom third of the screen for its own footer
+     * (dotted rule at y=94 down through its value row at y=124), unlike
+     * every other screen here, which -- like WindDirectionScreen's
+     * kContentBottom -- leaves y>=110 clear for this debug strip. Drawing
+     * both meant this strip's line/text landed directly on top of
+     * VarioBarScreen's footer labels and values, e.g. this strip's "LZ:"
+     * printing right through VarioBarScreen's "AGL"/altitude figures.
+     * VarioBarScreen's own footer already surfaces altitude and a
+     * selectable field, so this strip is redundant there, not lost.
+     */
+    if (activeScreen == ScreenId::VarioBar) {
+        return;
+    }
+
     display.drawLine(0, 128-18, 128, 128-18, SH110X_WHITE);
     display.setTextSize(1);
     display.setCursor(0, 128-15);
@@ -269,7 +306,7 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
             break;
     }
 
-    drawCommonStatusBar(display_, data);
+    drawCommonStatusBar(display_, data, activeScreen_);
     display_.display();
 }
 

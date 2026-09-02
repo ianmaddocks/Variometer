@@ -153,6 +153,10 @@ constexpr float WIND_ESTIMATE_MIN_SPEED_MS = 3.0f;
 constexpr float WIND_ESTIMATE_MAX_MS = 25.0f;
 constexpr uint16_t FLIGHT_RECORDING_DURATION_MINUTES = 120;
 constexpr uint32_t FLIGHT_LOG_FLUSH_INTERVAL_MS = 10000;
+
+// SW1-triggered raw GPS+barometer capture (see Application::sampleManualRecording).
+// 2 samples/second, independent of ALTITUDE_TRACE_SAMPLE_INTERVAL_MS above.
+constexpr uint32_t MANUAL_LOG_SAMPLE_INTERVAL_MS = 500;
 constexpr char WIFI_AP_SSID[] = "Variometer";
 constexpr char WIFI_AP_PASSWORD[] = "";
 constexpr uint8_t WIFI_AP_CHANNEL = 6;
@@ -235,10 +239,6 @@ constexpr float VARIO_DISPLAY_GRADUATION_MS = 0.5f;
 // auto-range this: a scale that rescales itself destroys the muscle
 // memory the bar exists to build.
 constexpr float VARIO_BAR_SCALE_MS = 5.0f;
-
-// Below this sink rate the numeric block inverts to black-on-white --
-// the mono equivalent of a red needle.
-constexpr float VARIO_BAR_INVERT_BELOW_MS = -1.5f;
 
 // Readings inside +/- this are shown as exactly zero, so the bar and
 // the sign glyph don't flicker in still air.

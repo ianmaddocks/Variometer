@@ -33,6 +33,8 @@ private:
     void updateDisplay();
     void initializeFlightSession();
     float calculateDistanceFromLz(float latitude, float longitude) const;
+    void toggleManualRecording();
+    void sampleManualRecording();
 
     FlightData flightData_;
     DeviceSettings settings_;
@@ -46,6 +48,13 @@ private:
     uint32_t lastTraceSampleMs_ = 0;
     uint32_t lastTrackSampleMs_ = 0;
     uint32_t flightStartTimeMs_ = 0;
+
+    // Manual SW1-triggered raw data capture, independent of the
+    // takeoff/landing flight-state machine. See Application::loop() and
+    // Application::toggleManualRecording().
+    bool manualRecordingActive_ = false;
+    uint32_t manualRecordingStartMs_ = 0;
+    uint32_t lastRawLogSampleMs_ = 0;
     GPS gps_;
     BiometricSensor biometricSensor_;
     Encoder encoder_;
