@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <WebServer.h>
 
+#include "core/FlightData.h"
 #include "flight/FlightRecorder.h"
 #include "sensors/GPS.h"
 
@@ -25,6 +26,14 @@ struct LogSample {
     float temperatureC = 0.0f;
 };
 
+/*
+ * Owns the WiFi AP and the device's whole web UI: the Vario/Flights/Settings
+ * tabs, live status feed, flight-log CSV storage/download/delete, and the
+ * OTA firmware upload. Kept as one class -- rather than splitting the web
+ * server out on its own -- because it already owned the WebServer instance
+ * for flight-log download before the other pages existed, and every page
+ * here shares that one server and the same WiFi AP lifecycle.
+ */
 class FlightLogStorage {
 public:
     void begin();
@@ -38,8 +47,33 @@ public:
     // once during power-off shutdown, ahead of deep sleep.
     void stopNetwork();
 
+    // Live data the Vario/Settings web pages read from. The pointer must
+    // outlive this object (Application owns both for its lifetime).
+    void setFlightData(const FlightData* data) { flightData_ = data; }
+
+    // Settings the web Settings page edits directly. The pointer must
+    // outlive this object.
+    void setSettings(DeviceSettings* settings) { settings_ = settings; }
+
+    // True once after a web settings save; the owner is expected to
+    // persist and re-apply settings_ in response. Consuming clears it.
+    bool consumeSettingsChanged();
+
+    // True once after the web Vario page's start/stop recording button is
+    // pressed; the owner is expected to act on it (same as an SW1 press).
+    // Consuming clears it.
+    bool consumeRecordToggleRequest();
+
 private:
-    void handleWebRequest();
+    void handleVarioPage();
+    void handleStyle();
+    void handleStatusJson();
+    void handleToggleRecording();
+    void handleFlightsPage();
+    void handleDownload();
+    void handleDeleteLog();
+    void handleSettingsPage();
+    void handleSettingsSave();
     void handleFirmwareUpload();
     bool isSafeFileName(const String& name) const;
     String makeStartName(const GPS::DateTime& startTime) const;
@@ -50,6 +84,11 @@ private:
     uint32_t lastFlushMs_ = 0;
     bool mounted_ = false;
     bool active_ = false;
+
+    const FlightData* flightData_ = nullptr;
+    DeviceSettings* settings_ = nullptr;
+    bool settingsChanged_ = false;
+    bool recordToggleRequested_ = false;
 };
 
 }  // namespace variometer

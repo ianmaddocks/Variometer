@@ -5,6 +5,7 @@
 #include <Wire.h>
 
 #include "config/Config.h"
+#include "config/SettingsStore.h"
 #include "utils/GeoUtils.h"
 
 namespace variometer {
@@ -54,18 +55,30 @@ void Application::begin() {
     display_.setPowerManager(&powerManager_);
     display_.setRecorder(&flightRecorder_);
     display_.setTrack(&flightTrack_);
-    display_.setReplaySpeed(settings_.replaySpeed);
     settings_.minSatellites = Config::MIN_SATELLITES_DEFAULT;
 
-    // Buzzer defaults to disabled inside the driver; without this it never sounds.
-    buzzer_.setEnabled(settings_.audioVarioEnabled);
-    buzzer_.playStartupTune();
+    // Pulls audio/haptic vario and replay-speed preferences from NVS,
+    // overwriting the DeviceSettings constructor defaults above with
+    // whatever was last saved via the web Settings page (see
+    // SettingsStore.h). A first boot with nothing saved yet leaves the
+    // defaults in place.
+    SettingsStore::load(settings_);
 
     // Haptic motor shares D0 with the (now disabled) buzzer -- see
     // Buzzer.cpp -- and is the only ascent/descent feedback actually
     // wired up on this board.
     haptic_.begin();
-    haptic_.setEnabled(settings_.hapticVarioEnabled);
+
+    // Buzzer defaults to disabled inside the driver; without this it
+    // never sounds. Also pushes replay speed to the display and mirrors
+    // all three into flightData_ for the Settings screen/page to read.
+    applySettings();
+    buzzer_.playStartupTune();
+
+    // Pointers, not copies: the web Settings/Vario pages read and edit
+    // these live, and must outlive FlightLogStorage's WebServer callbacks.
+    flightLogStorage_.setFlightData(&flightData_);
+    flightLogStorage_.setSettings(&settings_);
 
     // BLE stack init is independent of the I2C bus and sensors above, so
     // it does not need to sit before or after any of that setup.
@@ -185,11 +198,38 @@ void Application::reportHealth() {
     lastHealthMs_ = millis();
 }
 
+void Application::applySettings() {
+    buzzer_.setEnabled(settings_.audioVarioEnabled);
+    haptic_.setEnabled(settings_.hapticVarioEnabled);
+    display_.setReplaySpeed(settings_.replaySpeed);
+
+    flightData_.audioVarioEnabled = settings_.audioVarioEnabled;
+    flightData_.hapticVarioEnabled = settings_.hapticVarioEnabled;
+    flightData_.replaySpeed = settings_.replaySpeed;
+}
+
 void Application::loop() {
     const uint32_t loopStartUs = micros();
     const uint32_t now = millis();
 
     flightLogStorage_.update();
+
+    // The web Settings page writes straight into settings_ (see
+    // FlightLogStorage::setSettings()) and only flags that it did so,
+    // rather than pushing the change to hardware/NVS itself -- that
+    // belongs here, alongside every other settings write.
+    if (flightLogStorage_.consumeSettingsChanged()) {
+        SettingsStore::save(settings_);
+        applySettings();
+        DBGLN("Settings updated via web UI");
+    }
+
+    // The web Vario page's start/stop button goes through the same
+    // manual-recording path as an SW1 press, just requested asynchronously
+    // from a web request instead of a debounced GPIO edge.
+    if (flightLogStorage_.consumeRecordToggleRequest()) {
+        toggleManualRecording();
+    }
 
     encoder_.update();
     sw1Button_.update();

@@ -68,6 +68,18 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print("m/s State:");
     display.display().print(static_cast<int>(data.flightState));
 
+    // Read-only: these are edited from the web Settings page (WiFi AP),
+    // not here -- see FlightLogStorage's /settings route.
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print("Audio:");
+    display.display().print(data.audioVarioEnabled ? "On" : "Off");
+    display.display().print(" Haptic:");
+    display.display().print(data.hapticVarioEnabled ? "On" : "Off");
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print("Replay:");
+    display.display().print(static_cast<int>(data.replaySpeed));
+    display.display().print("x  (edit via WiFi)");
+
     //todo: allow min satellites to be changed in settings
     //todo: allow Alt Trace sampling to be adjusted and ring buffer size to be changed in settings
 

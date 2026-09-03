@@ -35,6 +35,7 @@ private:
     float calculateDistanceFromLz(float latitude, float longitude) const;
     void toggleManualRecording();
     void sampleManualRecording();
+    void applySettings();
 
     FlightData flightData_;
     DeviceSettings settings_;
