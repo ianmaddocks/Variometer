@@ -212,7 +212,17 @@ void Application::loop() {
         toggleManualRecording();
     }
 
-    if (encoder_.wasPressed()) {
+    /*
+     * Suppressed when this same status read also reports a double
+     * press: the encoder chip flags PUSHP (a push happened) on the
+     * second push of a double-push sequence too, so without this guard
+     * a power-off double-press also fires whatever single-press action
+     * applies to the current screen a moment before the power-off
+     * itself is processed below -- e.g. arming manual takeoff on the
+     * VarioBar screen, or toggling Settings edit mode, right as the
+     * device is about to power off.
+     */
+    if (encoder_.wasPressed() && !encoder_.wasDoublePressed()) {
         haptic_.triggerPulse(Config::HAPTIC_BUTTON_PULSE_MS);
         display_.handleButtonPress();
 

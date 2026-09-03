@@ -136,11 +136,13 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
     const float span = maxAlt - minAlt;
     const float range = (span > 1.0f) ? span : 1.0f;
 
-    // Draw reference bands at the minimum and maximum altitude in the current window.
-     int16_t minY = plotBottom - static_cast<int16_t>(((minAlt - minAlt) / range) * plotHeight);
-     int16_t maxY = plotBottom - static_cast<int16_t>(((maxAlt - minAlt) / range) * plotHeight);
-    minY = kPlotY;
-    maxY = kPlotY + kPlotH;
+    // Reference lines at the plot's top/bottom edges (not a function of
+    // minAlt/maxAlt -- they always land here since the trace itself is
+    // scaled to exactly fill [plotTop, plotBottom], so a per-frame
+    // recomputation from minAlt/maxAlt would just reproduce these same
+    // two constants).
+    const int16_t minY = kPlotY;
+    const int16_t maxY = kPlotY + kPlotH;
 
     for (int16_t x = plotLeft; x <= plotRight; x += 3) {
         display.display().drawPixel(x, maxY, SH110X_WHITE);

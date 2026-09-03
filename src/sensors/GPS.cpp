@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "config/Config.h"
 #include "sensors/MockGpsFeed.h"
@@ -9,24 +11,109 @@
 namespace variometer {
 namespace {
 
-float parseCoordinate(const String& value, const String& hemi) {
-    if (value.length() == 0) {
+/*
+ * A comma-delimited field within an NMEA sentence, as a pointer+length
+ * window into the sentence buffer -- never a copy. Every NMEA sentence
+ * arrives at 1-10Hz for the whole flight, so per-field/per-sentence
+ * String allocation here (the previous implementation) was exactly the
+ * heap-churn-in-a-hot-path pattern this codebase otherwise avoids (see
+ * DPS310Sensor/VarioCalculator's own sample handshakes).
+ */
+struct FieldRef {
+    const char* ptr = nullptr;
+    size_t len = 0;
+};
+
+// Splits a NUL-terminated NMEA sentence on commas into up to maxFields
+// FieldRefs (each pointing back into `sentence`, not allocated) and
+// returns the total field count found -- which may exceed maxFields;
+// fields beyond the cap are counted but not stored, matching the
+// previous fieldIndex bookkeeping so the "enough fields present" checks
+// below still see the true count.
+int splitFields(const char* sentence, FieldRef* fields, int maxFields) {
+    int fieldIndex = 0;
+    const char* start = sentence;
+    for (const char* p = sentence; ; ++p) {
+        if (*p == ',' || *p == '\0') {
+            if (fieldIndex < maxFields) {
+                fields[fieldIndex].ptr = start;
+                fields[fieldIndex].len = static_cast<size_t>(p - start);
+            }
+            ++fieldIndex;
+            if (*p == '\0') {
+                break;
+            }
+            start = p + 1;
+        }
+    }
+    return fieldIndex;
+}
+
+bool fieldEquals(const FieldRef& f, const char* literal) {
+    const size_t litLen = strlen(literal);
+    return f.len == litLen && memcmp(f.ptr, literal, litLen) == 0;
+}
+
+char fieldChar(const FieldRef& f) {
+    return (f.len > 0) ? f.ptr[0] : '\0';
+}
+
+// strtol/strtof read from f.ptr until the first non-numeric character,
+// which -- since every field is immediately followed by ',' or the
+// sentence's NUL -- always lands exactly on the field boundary. No
+// bounded copy is needed for these; parseCoordinate()'s degrees/minutes
+// split below is the one case that does need one.
+long fieldToLong(const FieldRef& f) {
+    if (f.len == 0) {
+        return 0;
+    }
+    return strtol(f.ptr, nullptr, 10);
+}
+
+float fieldToFloat(const FieldRef& f) {
+    if (f.len == 0) {
+        return 0.0f;
+    }
+    return strtof(f.ptr, nullptr);
+}
+
+float parseCoordinate(const char* value, size_t valueLen, char hemi) {
+    if (valueLen == 0) {
         return 0.0f;
     }
 
-    const int dot = value.indexOf('.');
+    const char* dotPtr = static_cast<const char*>(memchr(value, '.', valueLen));
+    if (dotPtr == nullptr) {
+        return 0.0f;
+    }
+    const int dot = static_cast<int>(dotPtr - value);
     if (dot <= 2) {
         return 0.0f;
     }
 
-    const int degrees = value.substring(0, dot - 2).toInt();
-    const float minutes = value.substring(dot - 2).toFloat();
+    /*
+     * Degrees are the fixed-width prefix before the last two whole-
+     * number digits of minutes (DDMM.MMMM / DDDMM.MMMM) -- unlike every
+     * other numeric field here, there is no delimiter between the
+     * degrees and minutes digits for strtol to stop at on its own, so
+     * this one field needs a small bounded stack copy.
+     */
+    char degBuf[8];
+    const size_t degLen = static_cast<size_t>(dot - 2);
+    if (degLen >= sizeof(degBuf)) {
+        return 0.0f;
+    }
+    memcpy(degBuf, value, degLen);
+    degBuf[degLen] = '\0';
+    const int degrees = atoi(degBuf);
+
+    const float minutes = strtof(value + (dot - 2), nullptr);
     if (degrees < 0 || isnan(minutes)) {
         return 0.0f;
     }
 
     float result = static_cast<float>(degrees) + (minutes / 60.0f);
-    if (hemi == "S" || hemi == "W") {
+    if (hemi == 'S' || hemi == 'W') {
         result = -result;
     }
     return result;
@@ -78,31 +165,22 @@ void GPS::enableMockFeed() {
 
 bool GPS::isMockEnabled() const { return mockEnabled_; }
 
-void GPS::feedMockSentence(const String& sentence) {
+void GPS::feedMockSentence(const char* sentence) {
     feedSerialSentence(sentence);
 }
 
-void GPS::feedSerialSentence(const String& sentence) {
-    if (sentence.startsWith("$GPGGA") || sentence.startsWith("$GNGGA")) {
-        String fields[15];
-        for (int i = 0; i < 15; ++i) {
-            fields[i] = "";
-        }
-        int fieldIndex = 0;
-        int start = 0;
-        for (int i = 0; i <= sentence.length(); ++i) {
-            if (sentence[i] == ',' || sentence[i] == '\0') {
-                if (fieldIndex < 15) {
-                    fields[fieldIndex] = sentence.substring(start, i);
-                }
-                fieldIndex++;
-                start = i + 1;
-            }
-        }
+void GPS::feedSerialSentence(const char* sentence) {
+    const bool isGga = strncmp(sentence, "$GPGGA", 6) == 0 || strncmp(sentence, "$GNGGA", 6) == 0;
+    const bool isRmc = !isGga &&
+        (strncmp(sentence, "$GPRMC", 6) == 0 || strncmp(sentence, "$GNRMC", 6) == 0);
+
+    if (isGga) {
+        FieldRef fields[15];
+        const int fieldIndex = splitFields(sentence, fields, 15);
 
         if (fieldIndex > 9) {
-            const int quality = fields[6].toInt();
-            const int sats = fields[7].toInt();
+            const int quality = static_cast<int>(fieldToLong(fields[6]));
+            const int sats = static_cast<int>(fieldToLong(fields[7]));
             if (sats >= 0) {
                 satellites_ = static_cast<uint8_t>(sats);
             }
@@ -118,8 +196,8 @@ void GPS::feedSerialSentence(const String& sentence) {
              * rock-steady 0 m at the GGA rate and reported a confident
              * 0.00 m/s rather than no data at all.
              */
-            if (fix_ && fields[9].length() > 0) {
-                const float altitude = fields[9].toFloat();
+            if (fix_ && fields[9].len > 0) {
+                const float altitude = fieldToFloat(fields[9]);
                 if (!isnan(altitude) && altitude > -1000.0f) {
                     altitude_ = altitude;
 
@@ -131,27 +209,14 @@ void GPS::feedSerialSentence(const String& sentence) {
             }
             hasData_ = true;
         }
-    } else if (sentence.startsWith("$GPRMC") || sentence.startsWith("$GNRMC")) {
-        String fields[13];
-        for (int i = 0; i < 13; ++i) {
-            fields[i] = "";
-        }
-        int fieldIndex = 0;
-        int start = 0;
-        for (int i = 0; i <= sentence.length(); ++i) {
-            if (sentence[i] == ',' || sentence[i] == '\0') {
-                if (fieldIndex < 13) {
-                    fields[fieldIndex] = sentence.substring(start, i);
-                }
-                fieldIndex++;
-                start = i + 1;
-            }
-        }
+    } else if (isRmc) {
+        FieldRef fields[13];
+        const int fieldIndex = splitFields(sentence, fields, 13);
 
-        if (fieldIndex > 7 && fields[2] == "A") {
-            if (fields[1].length() >= 6 && fields[9].length() >= 6) {
-                const int timeValue = fields[1].toInt();
-                const int dateValue = fields[9].toInt();
+        if (fieldIndex > 7 && fieldEquals(fields[2], "A")) {
+            if (fields[1].len >= 6 && fields[9].len >= 6) {
+                const int timeValue = static_cast<int>(fieldToLong(fields[1]));
+                const int dateValue = static_cast<int>(fieldToLong(fields[9]));
                 const uint8_t day = static_cast<uint8_t>(dateValue / 10000);
                 const uint8_t month = static_cast<uint8_t>((dateValue / 100) % 100);
                 const uint8_t year = static_cast<uint8_t>(dateValue % 100);
@@ -166,10 +231,10 @@ void GPS::feedSerialSentence(const String& sentence) {
                                          utcDateTime_.second < 60;
                 }
             }
-            const float lat = parseCoordinate(fields[3], fields[4]);
-            const float lon = parseCoordinate(fields[5], fields[6]);
-            const float speed = fields[7].toFloat() * 0.514444f;
-            const float course = fields[8].toFloat();
+            const float lat = parseCoordinate(fields[3].ptr, fields[3].len, fieldChar(fields[4]));
+            const float lon = parseCoordinate(fields[5].ptr, fields[5].len, fieldChar(fields[6]));
+            const float speed = fieldToFloat(fields[7]) * 0.514444f;
+            const float course = fieldToFloat(fields[8]);
             if (!isnan(lat) && !isnan(lon) && fabsf(lat) <= 90.0f && fabsf(lon) <= 180.0f) {
                 latitude_ = lat;
                 longitude_ = lon;
@@ -195,7 +260,7 @@ void GPS::update() {
         if (mockSentenceIndex_ < mockgps::kSentenceFeedCount) {
             const uint32_t now = millis();
             if (mockStartMs_ == 0 || (now - mockStartMs_) >= 1000) {
-                feedMockSentence(String(mockgps::kSentenceFeed[mockSentenceIndex_++]));
+                feedMockSentence(mockgps::kSentenceFeed[mockSentenceIndex_++]);
                 mockStartMs_ = now;
             }
         }
@@ -210,9 +275,7 @@ void GPS::update() {
         if (c == '\n') {
             buffer[index] = '\0';
             if (index > 0) {
-                const String sentence(buffer);
-                //Serial.println(sentence);
-                feedSerialSentence(sentence);
+                feedSerialSentence(buffer);
             }
             index = 0;
         } else if (index < sizeof(buffer) - 1) {

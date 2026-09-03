@@ -58,6 +58,7 @@ void FlightLogStorage::begin() {
     server_ = &webServer;
     webServer.on("/", HTTP_GET, [this]() { handleWebRequest(); });
     webServer.on("/download", HTTP_GET, [this]() { handleWebRequest(); });
+    webServer.on("/delete", HTTP_GET, [this]() { handleWebRequest(); });
     webServer.on("/update", HTTP_POST,
                  [this]() {
                      webServer.send(200, "text/plain", Update.hasError() ? "Firmware update failed" : "Update complete; rebooting");
@@ -191,9 +192,33 @@ void FlightLogStorage::handleWebRequest() {
         return;
     }
 
-    String page = "<!doctype html><html><head><meta name='viewport' content='width=device-width'>"
-                  "<title>Variometer</title></head><body><h1>Variometer</h1>"
-                  "<p>Wi-Fi: " + String(Config::WIFI_AP_SSID) + "</p><h2>Flight logs</h2><ul>";
+    if (webServer.uri() == "/delete") {
+        const String name = webServer.arg("name");
+        if (!isSafeFileName(name)) {
+            webServer.send(400, "text/plain", "Invalid log name");
+            return;
+        }
+        const String path = "/flights/" + name;
+        if (active_ && path == activePath_) {
+            webServer.send(409, "text/plain", "Cannot delete the flight log currently being recorded");
+            return;
+        }
+        if (!LittleFS.remove(path)) {
+            webServer.send(404, "text/plain", "Log not found");
+            return;
+        }
+        webServer.send(200, "text/plain", "OK");
+        return;
+    }
+
+    String page;
+    // Sized generously for a typical log count so the per-row
+    // concatenation below mostly appends into existing capacity rather
+    // than reallocating and copying the whole page on every row.
+    page.reserve(2048);
+    page = "<!doctype html><html><head><meta name='viewport' content='width=device-width'>"
+           "<title>Variometer</title></head><body><h1>Variometer</h1>"
+           "<p>Wi-Fi: " + String(Config::WIFI_AP_SSID) + "</p><h2>Flight logs</h2><ul>";
     File directory = LittleFS.open("/flights", "r");
     if (directory) {
         File file = directory.openNextFile();
@@ -201,8 +226,11 @@ void FlightLogStorage::handleWebRequest() {
             const String fullName = String(file.name());
             const String name = fullName.substring(fullName.lastIndexOf('/') + 1);
             if (name.endsWith(".csv") || name.endsWith(".part")) {
-                page += "<li><a href='/download?name=" + htmlEscape(name) + "'>" +
-                        htmlEscape(name) + "</a> (" + String(file.size()) + " bytes)</li>";
+                page += "<li id='log-" + htmlEscape(name) + "'><a href='/download?name=" +
+                        htmlEscape(name) + "'>" + htmlEscape(name) + "</a> (" +
+                        String(file.size()) + " bytes) &nbsp; "
+                        "<button type='button' onclick=\"removeLog(this,'" + htmlEscape(name) +
+                        "')\">Remove</button></li>";
             }
             file = directory.openNextFile();
         }
@@ -210,7 +238,16 @@ void FlightLogStorage::handleWebRequest() {
     }
     page += "</ul><h2>Firmware update</h2><form method='POST' action='/update' enctype='multipart/form-data'>"
             "<input type='file' name='firmware' accept='.bin' required><button type='submit'>Upload firmware</button>"
-            "</form></body></html>";
+            "</form><script>"
+            "function removeLog(btn,name){"
+            "if(!confirm('Delete this log?'))return;"
+            "btn.disabled=true;btn.textContent='Removing...';"
+            "fetch('/delete?name='+encodeURIComponent(name)).then(function(r){"
+            "if(!r.ok)throw 0;"
+            "document.getElementById('log-'+name).remove();"
+            "}).catch(function(){btn.disabled=false;btn.textContent='Remove';alert('Delete failed');});"
+            "}"
+            "</script></body></html>";
     webServer.send(200, "text/html", page);
 }
 
@@ -221,11 +258,15 @@ void FlightLogStorage::handleFirmwareUpload() {
             Update.printError(Serial);
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        // Guarded on isRunning() so a failed begin() (or a write that
+        // already failed and aborted the update) doesn't keep feeding
+        // bytes to an Update object that was never successfully started.
+        if (Update.isRunning() &&
+            Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
             Update.printError(Serial);
         }
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (!Update.end(true)) {
+        if (Update.isRunning() && !Update.end(true)) {
             Update.printError(Serial);
         }
     }

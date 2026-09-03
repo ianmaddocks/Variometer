@@ -1,4 +1,4 @@
-#include "display/VarioBarScreen.h"
+#include "display/VarioScreen.h"
 
 #include <Arduino.h>
 #include <math.h>

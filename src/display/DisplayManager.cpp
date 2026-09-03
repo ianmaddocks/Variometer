@@ -6,7 +6,7 @@
 #include "display/AltitudeTraceScreen.h"
 #include "display/LandedScreen.h"
 #include "display/SettingsScreen.h"
-#include "display/VarioBarScreen.h"
+#include "display/VarioScreen.h"
 #include "display/WindDirectionScreen.h"
 #include "display/FlightMapScreen.h"
 
@@ -38,7 +38,9 @@ void drawBatteryIcon(SimpleDisplay& display, float percent, int16_t x, int16_t y
 }
 
 void drawSignalBars(SimpleDisplay& display, uint8_t satellites, int16_t x, int16_t y) {
-    const uint8_t bars = (satellites > Config::MIN_SATELLITES_DEFAULT) ? Config::MIN_SATELLITES_DEFAULT : max(satellites, static_cast<uint8_t>(1));
+    // No floor at 1: zero satellites must render as zero lit bars, or a
+    // total GPS outage looks identical to a marginal single-satellite fix.
+    const uint8_t bars = (satellites > Config::MIN_SATELLITES_DEFAULT) ? Config::MIN_SATELLITES_DEFAULT : satellites;
     for (uint8_t i = 0; i < Config::MIN_SATELLITES_DEFAULT; ++i) {
         const int16_t barHeight = 2 + (i * 6) / (Config::MIN_SATELLITES_DEFAULT - 1); // the first bar is always 2, the last bar reaches 8, intermediate bars scale smoothly between them, the growth is proportional to the bar’s position within the threshold
         const int16_t barY = y - barHeight + 2;
@@ -158,7 +160,20 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (previous == ScreenId::AltitudeTrace) altitudeTraceScreen_->exit();
     if (previous == ScreenId::WindDirection) windDirectionScreen_->exit();
     if (previous == ScreenId::FlightMap) flightMapScreen_->exit();
-    if (previous == ScreenId::Settings) settingsScreen_->exit();
+    if (previous == ScreenId::Settings) {
+        settingsScreen_->exit();
+        /*
+         * Reset here, not just on a button-driven exit: a flight-state
+         * transition (e.g. takeoff auto-detected) can force setScreen()
+         * away from Settings while edit mode is still active. Without
+         * this, settingsEditMode_ stays stuck true, and the next time
+         * the pilot cycles back to Settings, handleEncoderDelta() hijacks
+         * the encoder for field-editing instead of screen navigation.
+         */
+        if (settingsEditMode_) {
+            exitSettingsEditMode();
+        }
+    }
     if (previous == ScreenId::Landed) landedScreen_->exit();
 
     if (screen == ScreenId::VarioBar) varioBarScreen_->enter();

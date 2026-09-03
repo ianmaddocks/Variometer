@@ -56,8 +56,8 @@ public:
     uint32_t getPositionSampleSequence() const;
 
 private:
-    void feedMockSentence(const String& sentence);
-    void feedSerialSentence(const String& sentence);
+    void feedMockSentence(const char* sentence);
+    void feedSerialSentence(const char* sentence);
 
     bool hasData_ = false;
     float latitude_ = 0.0f;

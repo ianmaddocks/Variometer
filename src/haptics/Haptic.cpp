@@ -34,7 +34,12 @@ void Haptic::update() {
         return;
     }
 
-    if (millis() < pulseOffMs_) {
+    // Wraparound-safe elapsed-time check (matches the millis()-diff idiom
+    // used elsewhere, e.g. PowerManager::readyToSleep()): a direct
+    // `millis() < pulseOffMs_` comparison breaks for a few ms every time
+    // millis() rolls over past UINT32_MAX, cutting the in-progress pulse
+    // short right at that moment.
+    if (static_cast<int32_t>(millis() - pulseOffMs_) < 0) {
         return;
     }
 
