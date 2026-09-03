@@ -33,6 +33,17 @@ void PowerOffScreen::draw(DisplayManager& display, const FlightData& data) {
 
     int line = 3;
     display.display().setCursor(0, 1);
+
+    if (display.isPoweringOff()) {
+        // Shown for the ~800ms the power-off tune plays before radios
+        // are stopped and the screen goes blank ahead of deep sleep --
+        // see PowerManager::readyToSleep() / Application::loop().
+        display.display().print("Powering Off");
+        display.display().setCursor(0, line++ * Config::LINE_SPACING);
+        display.display().print("Please wait...");
+        return;
+    }
+
     display.display().print("Power Off");
     display.display().setCursor(0, line++ *Config::LINE_SPACING);
     display.display().print("2x press to power off");

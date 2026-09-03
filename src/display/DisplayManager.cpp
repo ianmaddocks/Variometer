@@ -465,6 +465,11 @@ void DisplayManager::setPowerManager(PowerManager* powerManager) {
     powerManager_ = powerManager;
 }
 
+void DisplayManager::blankScreen() {
+    display_.clear();
+    display_.display();
+}
+
 void DisplayManager::setRecorder(FlightRecorder* recorder) {
     recorder_ = recorder;
 }

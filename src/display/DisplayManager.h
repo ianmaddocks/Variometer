@@ -136,6 +136,12 @@ public:
     SimpleDisplay& display();
     bool isPowerOffScreen() const { return activeScreen_ == ScreenId::PowerOff; }
     bool isPreTakeoffScreen() const { return activeScreen_ == ScreenId::PreTakeoff; }
+    bool isPoweringOff() const { return powerManager_ != nullptr && powerManager_->shouldPowerOff(); }
+
+    // Clears the OLED and pushes the blank frame. Called once shutdown
+    // (radios off, etc.) is complete and right before deep sleep, so the
+    // screen doesn't just freeze on its last frame when power is cut.
+    void blankScreen();
 
 private:
     void updateScreenSelection(const FlightData& data);

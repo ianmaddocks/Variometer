@@ -73,6 +73,18 @@ void FlightLogStorage::begin() {
          WiFi.softAPIP().toString().c_str());
 }
 
+void FlightLogStorage::stopNetwork() {
+    if (server_ != nullptr) {
+        webServer.stop();
+        server_ = nullptr;
+    }
+
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+
+    DBGLN("FlightLogStorage: WiFi AP stopped");
+}
+
 void FlightLogStorage::update() {
     if (server_ != nullptr) {
         server_->handleClient();

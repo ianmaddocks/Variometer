@@ -34,6 +34,10 @@ public:
     void finishFlight(uint32_t durationSeconds);
     bool isActive() const;
 
+    // Stops the download web server and the WiFi AP it runs on. Called
+    // once during power-off shutdown, ahead of deep sleep.
+    void stopNetwork();
+
 private:
     void handleWebRequest();
     void handleFirmwareUpload();

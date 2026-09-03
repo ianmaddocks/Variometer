@@ -160,6 +160,19 @@ bool BleTelemetry::isConnected() const {
     return (server_ != nullptr) && (server_->getConnectedCount() > 0);
 }
 
+void BleTelemetry::shutdown() {
+    if (server_ == nullptr) {
+        return;
+    }
+
+    NimBLEDevice::getAdvertising()->stop();
+    NimBLEDevice::deinit(true);  // true: also releases the controller memory.
+    server_ = nullptr;
+    txCharacteristic_ = nullptr;
+
+    DBGLN("BLE telemetry: shut down");
+}
+
 void BleTelemetry::update(const FlightData& data, const GPS::DateTime& utc,
                           bool baroValid, float pressurePa, float temperatureC) {
     if (!isConnected()) {

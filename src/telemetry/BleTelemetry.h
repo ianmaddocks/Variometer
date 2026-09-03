@@ -50,6 +50,11 @@ public:
 
     bool isConnected() const;
 
+    // Stops advertising and powers down the BT/BLE controller. Called
+    // once during power-off shutdown; the device is about to enter deep
+    // sleep, so nothing here needs to be resumable.
+    void shutdown();
+
 private:
     void sendGpsSentences(const FlightData& data, const GPS::DateTime& utc);
     void sendVarioSentence(const FlightData& data, bool baroValid,

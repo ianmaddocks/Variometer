@@ -321,8 +321,16 @@ void Application::loop() {
         lastDisplayMs_ = now;
     }
 
-    if (powerManager_.shouldPowerOff()) {
-        DBGLN("Power-off requested");
+    if (powerManager_.readyToSleep()) {
+        // Runs once: sleepNow() below never returns. Order matters --
+        // radios go quiet, then the screen goes blank, then power is
+        // actually cut, so nothing is left half-shut-down if any of
+        // these steps ever grew a reason to take a moment.
+        DBGLN("Power-off: shutting down radios and display before sleep");
+        bleTelemetry_.shutdown();
+        flightLogStorage_.stopNetwork();
+        display_.blankScreen();
+        powerManager_.sleepNow();
     }
 
     /*
