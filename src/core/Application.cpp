@@ -217,18 +217,14 @@ void Application::loop() {
         display_.handleButtonPress();
 
         /*
-         * Gated on the Pre-Takeoff screen specifically, not merely on
-         * PREFLIGHT state. The spec ties manual takeoff to "pressing the
-         * encoder button while in this screen" (Pre-Takeoff); the check
-         * used to be state-only, so a press on ANY preflight screen --
-         * StartUp while still waiting for GPS lock, Settings, even
-         * PowerOff -- silently forced takeoff. On Settings specifically
-         * that meant a single press both toggled edit mode AND started
-         * the flight, since handleButtonPress() above reads the same
-         * press for its own screen-specific action.
+         * Gated on the VarioBar screen specifically, not merely on
+         * PREFLIGHT state. VarioBar is the default/only preflight screen
+         * now, so pressing on it is the manual-takeoff gesture; a press
+         * on Settings still just toggles edit mode there instead
+         * (handleButtonPress() above reads the same press for that).
          */
         if (flightData_.flightState == FlightState::PREFLIGHT &&
-            display_.isPreTakeoffScreen()) {
+            display_.isVarioBarScreen()) {
             flightDetector_.requestTakeoff();
         }
     }
@@ -250,10 +246,16 @@ void Application::loop() {
     // stands in here.
     const bool doublePressEvent = encoder_.consumeDoublePress();
 
-    if (display_.isPowerOffScreen() && doublePressEvent) {
+    // Power-off is a double press on any screen, so long as we're not
+    // airborne -- there's no dedicated Power Off screen to navigate to
+    // first any more.
+    const bool inFlight = flightData_.flightState == FlightState::FLIGHT ||
+                          flightData_.flightState == FlightState::TAKEOFF_DETECTED;
+
+    if (doublePressEvent && !inFlight) {
         powerManager_.requestPowerOff();
         buzzer_.playPowerOffTune();
-        DBGLN("Power-off sequence initiated by double press on Power Off screen");
+        DBGLN("Power-off sequence initiated by double press");
     }
 
 #ifdef DEBUG

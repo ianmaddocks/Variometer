@@ -23,8 +23,11 @@ void SettingsScreen::update(const FlightData& data) {
 }
 
 void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
-    // See VarioScreen.cpp for why this is compiled out entirely in
-    // release builds rather than left as a DBGLN no-op.
+    // Compiled out entirely in release builds rather than left as a
+    // DBGLN no-op: DBGLN alone being a no-op still leaves this String
+    // concatenation running unconditionally at the screen's redraw
+    // rate, and Arduino String's heap allocation on every '+' is
+    // exactly what should be avoided in a high-frequency loop.
 #ifdef DEBUG
     String status = data.gpsFix ? "Settings: GPS fix active" : "Settings: GPS fix pending";
     if (status != lastSettingsStatus) {

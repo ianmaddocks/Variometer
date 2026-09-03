@@ -146,30 +146,30 @@ Use a screen/state architecture.
 For example:  
 
 Screen
- ├── StartUpScreen
- ├── Pre-TakeoffScreen
- ├── VariometerScreen
+ ├── VarioBarScreen
  ├── WindDirectionScreen
  ├── FlightMapScreen
  ├── AltitudeTraceScreen
  ├── LandedScreen
- ├── SettingsScreen
- └── PowerOffScreen
+ └── SettingsScreen
 
 ⸻  
   
-## Screen Navigation  
-The rotary encoder selects the screen. While in-flight the available screens are:  
-1. Variometer  
-2. Wind Direction  
-3. Flight Map  
-4. Altitude Trace  
-Rotating the encoder should move between screens.  
+## Screen Navigation — SIMPLIFIED, supersedes Start Up / Pre-takeoff / Power Off / Variometer Screen below  
+`StartUpScreen`, `PreTakeoffScreen`, `PowerOffScreen`, and the plain text `VarioScreen` have all been removed to simplify the UI. **VarioBar is now the initial screen** shown on power-up (no boot/GPS-wait screen) and the only screen the pilot sits on before takeoff. The sections below ("Start Up", "Pre-takeoff", "Power Off", "Variometer Screen") describe the original spec and are kept for historical context only — do not reintroduce those screens or route navigation back through them.
+
+Current navigation, by `FlightState` (`DisplayManager::handleEncoderDelta()`):
+* **PREFLIGHT**: encoder cycles `{VarioBar, Settings}`. Manual takeoff is triggered by pressing the encoder button while on the VarioBar screen (`DisplayManager::isVarioBarScreen()`, checked in `Application::loop()`) — not a dedicated Pre-Takeoff screen.
+* **FLIGHT / TAKEOFF_DETECTED**: encoder cycles `{VarioBar, WindDirection, FlightMap, AltitudeTrace, Settings}`.
+* **LANDING_DETECTED / POST_FLIGHT**: encoder cycles `{Landed, FlightMap, AltitudeTrace, Settings}`.
+
+Power-off is now a double-press of the encoder on **any** screen, gated only on not being airborne (`FlightState` other than `FLIGHT`/`TAKEOFF_DETECTED`) — see `Application::loop()`. There is no dedicated Power Off screen to navigate to first; a brief "Powering Off / Please wait" overlay is drawn over whatever screen is active for the duration of the power-off tune (`DisplayManager::drawCurrentScreen()`, gated on `isPoweringOff()`).
+
 The selected screen should update efficiently without unnecessarily redrawing the entire display when nothing has changed.  
   
 ⸻  
   
-## Start Up  
+## Start Up — HISTORICAL, superseded by Screen Navigation above  
 > **Note on mockup images:** Several sections below reference image mockups (`Attachments/*.heic`) that were pulled in from a personal notes app and were never committed to this repository. The paths do not resolve on GitHub and are not viewable by Copilot. Treat the surrounding text description as the source of truth for each screen's layout; if the visual mockups are still needed, add the actual image files under `docs/mockups/` and update the links to point there.
 
 When the device is powered up, display a starting screen and play a short start up tune. Something like: [Startup tune reference](https://photos.app.goo.gl/19hvM5sBXp1vhVhf7)
@@ -188,7 +188,7 @@ Less prominently, at the bottom of the screen:
 Where <min satellites> is configured by the user in the settings screen (defaulting to 5).   
 Once the minimum of satellites has been acquired the text should change to “Determining Altitude”. Once the DPS310 based altitude has settled and the minimum number of satellites has been reached, the screen should switch to pre-takeoff screen.   
 ⸻  
-## Pre-takeoff  
+## Pre-takeoff — HISTORICAL, superseded by Screen Navigation above  
 This screen should show   
 * current GPS long & latitude   
 * DPS310 altitude  
@@ -207,7 +207,7 @@ Pressing the encoder button takes user to Variometer screen and begins flight lo
   
 ⸻  
   
-## Power Off  
+## Power Off — HISTORICAL, superseded by Screen Navigation above  
 Power Off must be treated as a deliberate action.  
 The user must **press and hold the rotary encoder button** to initiate power-off.  
 Do not power off from a simple short button press.  
@@ -594,8 +594,8 @@ src/
 │   ├── DisplayManager.h
 │   ├── DisplayManager.cpp
 │   ├── Screen.h
-│   ├── VarioScreen.h
-│   ├── VarioScreen.cpp
+│   ├── VarioBarScreen.h
+│   ├── VarioBarScreen.cpp
 │   ├── WindDirectionScreen.h
 │   ├── WindDirectionScreen.cpp
 │   ├── FlightMapScreen.h
@@ -605,8 +605,7 @@ src/
 │   ├── LandedScreen.h
 │   ├── LandedScreen.cpp
 │   ├── SettingsScreen.h
-│   ├── SettingsScreen.cpp
-│   └── PowerOffScreen.h
+│   └── SettingsScreen.cpp
 │
 └── utils/
     ├── GeoUtils.h
@@ -902,13 +901,8 @@ Improve:
 ## Known Regressions — Do Not Reintroduce  
 The following changes were tried, caused a real regression, and were reverted (see commit `5c0a98f`, "undone most Claude", which rolled back parts of `170d5cf`). Do not reapply them without also fixing the root cause described.
 
-### PREFLIGHT screen-cycle array must contain `StartUp`, not `PreTakeoff` — RESOLVED, see below  
-`DisplayManager::handleEncoderDelta()` picks a `preflightOrder[]` array to cycle through while `currentFlightState_ == FlightState::PREFLIGHT`. It was once changed from `{StartUp, Settings, PowerOff}` to `{PreTakeoff, Settings, PowerOff}` to better match the screen names used elsewhere in this document. That change froze the UI on the StartUp screen:  
-* Any encoder rotation sets `manualSelectionActive_ = true` — even while still on the StartUp screen, before GPS lock.  
-* `updateScreenSelection()` only performed the automatic StartUp → PreTakeoff transition (on GPS lock) when `manualSelectionActive_` was false.  
-* With `PreTakeoff` in the array instead of `StartUp`, rotating the encoder while on the StartUp screen matched nothing, so the manual cycle silently did nothing — and `manualSelectionActive_` stayed stuck `true`, so the automatic transition never fired either. The device got stuck on the StartUp screen permanently, with no manual or automatic way off it.  
-
-**Fixed properly**: `updateScreenSelection()` now runs the StartUp → PreTakeoff transition *before* the `manualSelectionActive_` guard (it's checked unconditionally whenever `activeScreen_ == ScreenId::StartUp` and GPS is locked, with an early `return`), so a prior encoder touch can no longer block it. `preflightOrder[]` now correctly contains `PreTakeoff` again, matching the spec. If StartUp/PreTakeoff navigation ever seems stuck again, check that ordering in `updateScreenSelection()` first — the fix depends on the auto-transition check running *before*, not after, the `manualSelectionActive_` guard.
+### PREFLIGHT screen-cycle array must contain `StartUp`, not `PreTakeoff` — MOOT, screens removed  
+This entry described a StartUp↔PreTakeoff auto-transition bug in `DisplayManager::updateScreenSelection()`/`handleEncoderDelta()`. Both `StartUpScreen` and `PreTakeoffScreen` have since been removed as part of the UI simplification (see "Screen Navigation" above) — Vario is now the sole preflight screen and there is no GPS-wait hand-off to get stuck on. Kept here only so the history in commit `5c0a98f`/`170d5cf` still makes sense; there is no longer a `StartUp`/`PreTakeoff` ordering to get wrong.
 
 ### MS5611 pressure formula: the final `>>15` applies to the whole expression, not just `OFF` — HISTORICAL, MS5611-specific  
 Per the MS5611 datasheet, `P = (D1*SENS/2^21 - OFF) / 2^15` — the `>>15` must be applied after subtracting `OFF`, not only to `OFF` on its own. A change once rewrote this in `MS5611Sensor.cpp` as:  

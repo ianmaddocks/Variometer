@@ -5,14 +5,10 @@
 
 #include "display/AltitudeTraceScreen.h"
 #include "display/LandedScreen.h"
-#include "display/PreTakeoffScreen.h"
 #include "display/SettingsScreen.h"
-#include "display/StartUpScreen.h"
-#include "display/VarioScreen.h"
 #include "display/VarioBarScreen.h"
 #include "display/WindDirectionScreen.h"
 #include "display/FlightMapScreen.h"
-#include "display/PowerOffScreen.h"
 
 namespace variometer {
 namespace {
@@ -96,21 +92,22 @@ void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data, ScreenI
         return;
     }
 
-    display.drawLine(0, 128-18, 128, 128-18, SH110X_WHITE);
+    display.drawLine(0, 128-9, 128, 128-9, SH110X_WHITE);
     display.setTextSize(1);
-    display.setCursor(0, 128-15);
+    display.setCursor(0, 128-7);
     display.print("F:");
     display.print(static_cast<int>(data.flightDuration / 60));
     display.print("m");
     display.print(" LZ:");
-    display.print(data.distanceFromLZ, 1);
+    display.print(data.distanceFromLZ, 0);
     display.print("km");
     display.print(" S:");
     display.print(static_cast<int>(data.groundSpeed * 3.6f));
-    display.print(" A:");
-    display.print(static_cast<int>(data.barometricAltitude));
-    display.print(" V:");
-    display.print(data.verticalSpeed, 1);
+    display.print("km/h");
+    //display.print(" A:");
+    //display.print(static_cast<int>(data.barometricAltitude));
+    //display.print(" V:");
+    //display.print(data.verticalSpeed, 1);
     //display.setCursor(95, kStatusY);
 #endif
 }
@@ -118,15 +115,11 @@ void drawCommonStatusBar(SimpleDisplay& display, const FlightData& data, ScreenI
 }  // namespace
 
 DisplayManager::DisplayManager()
-    : startupScreen_(new StartUpScreen()),
-      preTakeoffScreen_(new PreTakeoffScreen()),
-      variometerScreen_(new VarioScreen()),
-      varioBarScreen_(new VarioBarScreen()),
+    : varioBarScreen_(new VarioBarScreen()),
       altitudeTraceScreen_(new AltitudeTraceScreen()),
       windDirectionScreen_(new WindDirectionScreen()),
       flightMapScreen_(new FlightMapScreen()),
       settingsScreen_(new SettingsScreen()),
-      powerOffScreen_(new PowerOffScreen()),
       landedScreen_(new LandedScreen()) {}
 
 SimpleDisplay& DisplayManager::display() {
@@ -149,7 +142,7 @@ void DisplayManager::setReplaySpeed(uint8_t speed) {
 void DisplayManager::begin() {
     display_.begin();
     initialized_ = true;
-    startupScreen_->enter();
+    varioBarScreen_->enter();
     DBGLN("Display initialized");
 }
 
@@ -161,26 +154,18 @@ void DisplayManager::setScreen(ScreenId screen) {
     const ScreenId previous = activeScreen_;
     activeScreen_ = screen;
 
-    if (previous == ScreenId::StartUp) startupScreen_->exit();
-    if (previous == ScreenId::PreTakeoff) preTakeoffScreen_->exit();
-    if (previous == ScreenId::Variometer) variometerScreen_->exit();
     if (previous == ScreenId::VarioBar) varioBarScreen_->exit();
     if (previous == ScreenId::AltitudeTrace) altitudeTraceScreen_->exit();
     if (previous == ScreenId::WindDirection) windDirectionScreen_->exit();
     if (previous == ScreenId::FlightMap) flightMapScreen_->exit();
     if (previous == ScreenId::Settings) settingsScreen_->exit();
-    if (previous == ScreenId::PowerOff) powerOffScreen_->exit();
     if (previous == ScreenId::Landed) landedScreen_->exit();
 
-    if (screen == ScreenId::StartUp) startupScreen_->enter();
-    if (screen == ScreenId::PreTakeoff) preTakeoffScreen_->enter();
-    if (screen == ScreenId::Variometer) variometerScreen_->enter();
     if (screen == ScreenId::VarioBar) varioBarScreen_->enter();
     if (screen == ScreenId::AltitudeTrace) altitudeTraceScreen_->enter();
     if (screen == ScreenId::WindDirection) windDirectionScreen_->enter();
     if (screen == ScreenId::FlightMap) flightMapScreen_->enter();
     if (screen == ScreenId::Settings) settingsScreen_->enter();
-    if (screen == ScreenId::PowerOff) powerOffScreen_->enter();
     if (screen == ScreenId::Landed) landedScreen_->enter();
 }
 
@@ -197,9 +182,9 @@ void DisplayManager::updateScreenSelection(const FlightData& data) {
                                     previousState != FlightState::TAKEOFF_DETECTED;
         if (enteringFlight) {
             manualSelectionActive_ = false;
-            setScreen(ScreenId::Variometer);
-        } else if (!manualSelectionActive_ && activeScreen_ != ScreenId::Variometer) {
-            setScreen(ScreenId::Variometer);
+            setScreen(ScreenId::VarioBar);
+        } else if (!manualSelectionActive_ && activeScreen_ != ScreenId::VarioBar) {
+            setScreen(ScreenId::VarioBar);
         }
         return;
     }
@@ -216,38 +201,8 @@ void DisplayManager::updateScreenSelection(const FlightData& data) {
         return;
     }
 
-    /*
-     * StartUp -> PreTakeoff is a mandatory hand-off once GPS locks, not
-     * a "helpful default" the pilot can override by having touched the
-     * encoder earlier. Unlike the FLIGHT/POST_FLIGHT auto-screens above
-     * (which defer to a manual choice once the pilot has made one),
-     * StartUp is a transient "waiting for GPS" state with nothing
-     * useful to do once locked -- it must always hand off, even if the
-     * pilot rotated the encoder while still waiting (which latches
-     * manualSelectionActive_ but is a no-op screen-wise, since StartUp
-     * is not itself in preflightOrder[]). This check therefore runs
-     * before the manualSelectionActive_ guard below, deliberately.
-     *
-     * Without this carve-out, a single encoder rotation before lock
-     * permanently prevented the advance to PreTakeoff -- which, since
-     * PreTakeoff is what preflightOrder[] cycles through, made manual
-     * takeoff (gated on being on the Pre-Takeoff screen) unreachable
-     * for the rest of the session.
-     */
-    if (data.gpsFix && data.satellites >= 4 && activeScreen_ == ScreenId::StartUp) {
-        setScreen(ScreenId::PreTakeoff);
-        return;
-    }
-
-    if (manualSelectionActive_) {
-        return;
-    }
-
-    if (!data.gpsFix || data.satellites < 4) {
-        if (activeScreen_ != ScreenId::StartUp) {
-            setScreen(ScreenId::StartUp);
-        }
-    }
+    // PREFLIGHT: no forced screen. VarioBar is the default/initial screen
+    // and stays put until the pilot manually cycles elsewhere.
 }
 
 void DisplayManager::drawCurrentScreen(const FlightData& data) {
@@ -262,7 +217,21 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
 
     display_.clear();
 
-    if (activeScreen_ == ScreenId::Variometer && recorder_ != nullptr && recorder_->size() > 1) {
+    if (isPoweringOff()) {
+        // Shown for the ~800ms the power-off tune plays before radios
+        // are stopped and the screen goes blank ahead of deep sleep --
+        // see PowerManager::readyToSleep() / Application::loop(). Drawn
+        // as a full-screen overlay rather than a dedicated screen so it
+        // can interrupt whatever screen was active at the time.
+        display_.setCursor(0, 1);
+        display_.print("Powering Off");
+        display_.setCursor(0, Config::LINE_SPACING);
+        display_.print("Please wait...");
+        display_.display();
+        return;
+    }
+
+    if (activeScreen_ == ScreenId::VarioBar && recorder_ != nullptr && recorder_->size() > 1) {
         const size_t count = recorder_->size();
         const TracePoint& first = recorder_->at(0);
         const TracePoint& latest = recorder_->at(count - 1);
@@ -271,15 +240,6 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
     }
 
     switch (activeScreen_) {
-        case ScreenId::StartUp:
-            startupScreen_->draw(*this, data);
-            break;
-        case ScreenId::PreTakeoff:
-            preTakeoffScreen_->draw(*this, data);
-            break;
-        case ScreenId::Variometer:
-            variometerScreen_->draw(*this, data);
-            break;
         case ScreenId::VarioBar:
             varioBarScreen_->draw(*this, data);
             break;
@@ -297,9 +257,6 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
             break;
         case ScreenId::Settings:
             settingsScreen_->draw(*this, data);
-            break;
-        case ScreenId::PowerOff:
-            powerOffScreen_->draw(*this, data);
             break;
         case ScreenId::Landed:
             landedScreen_->draw(*this, data);
@@ -354,48 +311,22 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     ScreenId nextScreen = activeScreen_;
 
     if (currentFlightState_ == FlightState::PREFLIGHT) {
-        /*
-         * PreTakeoff, not StartUp, per the spec's Pre-takeoff screen
-         * cycle (Settings / Power Off / Pre-Takeoff). An earlier attempt
-         * at this exact change was reverted (see "Known Regressions" in
-         * copilot-instructions.md) because it froze the UI on StartUp:
-         * manualSelectionActive_ blocked the StartUp->PreTakeoff
-         * auto-transition once the encoder had been touched, and with
-         * StartUp no longer in this ring, encoder input on StartUp
-         * became a permanent dead end. That root cause is now fixed
-         * above (the auto-transition runs unconditionally before the
-         * manualSelectionActive_ guard), so this change is safe to
-         * reapply. If StartUp/PreTakeoff navigation ever seems stuck
-         * again, check that fix before touching this array.
-         */
-        static const ScreenId preflightOrder[] = {ScreenId::PreTakeoff, ScreenId::Settings, ScreenId::PowerOff};
-        constexpr int count = 3;
-        bool found = false;
+        // VarioBar is the default preflight screen; the only other screen
+        // reachable from it before takeoff is Settings.
+        static const ScreenId preflightOrder[] = {ScreenId::VarioBar, ScreenId::Settings};
+        constexpr int count = 2;
         for (int i = 0; i < count; ++i) {
             if (preflightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
                 nextScreen = preflightOrder[nextIndex];
-                found = true;
                 break;
             }
         }
-        /*
-         * activeScreen_ is StartUp (still waiting for GPS lock), which
-         * is deliberately absent from preflightOrder[] -- see the
-         * comment above. Without this, rotating the encoder before
-         * lock matched nothing and silently did nothing, making
-         * Settings unreachable until GPS locked. Enter the ring from
-         * either end depending on rotation direction instead of forcing
-         * the pilot to wait for lock just to change a setting.
-         */
-        if (!found) {
-            nextScreen = (delta > 0) ? preflightOrder[0] : preflightOrder[count - 1];
-        }
     } else if (currentFlightState_ == FlightState::FLIGHT || currentFlightState_ == FlightState::TAKEOFF_DETECTED) {
-        static const ScreenId inFlightOrder[] = {ScreenId::Variometer, ScreenId::VarioBar,
+        static const ScreenId inFlightOrder[] = {ScreenId::VarioBar,
                                                  ScreenId::WindDirection, ScreenId::FlightMap,
                                                  ScreenId::AltitudeTrace, ScreenId::Settings};
-        constexpr int count = 6;
+        constexpr int count = 5;
         for (int i = 0; i < count; ++i) {
             if (inFlightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -405,9 +336,8 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
         }
     } else if (currentFlightState_ == FlightState::LANDING_DETECTED || currentFlightState_ == FlightState::POST_FLIGHT) {
         static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::FlightMap,
-                                               ScreenId::AltitudeTrace, ScreenId::Settings,
-                                               ScreenId::PowerOff};
-        constexpr int count = 5;
+                                               ScreenId::AltitudeTrace, ScreenId::Settings};
+        constexpr int count = 4;
         for (int i = 0; i < count; ++i) {
             if (landedOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -428,11 +358,6 @@ void DisplayManager::handleButtonPress() {
         } else {
             exitSettingsEditMode();
         }
-        return;
-    }
-
-    if (activeScreen_ == ScreenId::PowerOff) {
-        DBGLN("Power-off screen active: long press required to shutdown");
         return;
     }
 

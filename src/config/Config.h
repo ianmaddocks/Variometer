@@ -104,7 +104,7 @@ constexpr uint32_t GPS_UPDATE_INTERVAL_MS = 1000;
 constexpr size_t GPS_RX_BUFFER_BYTES = 2048;
 
 constexpr uint32_t DISPLAY_UPDATE_INTERVAL_MS = 100;
-constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 1000;
+constexpr uint32_t ALTITUDE_TRACE_SAMPLE_INTERVAL_MS = 3000;
 
 /*
  * How often a position is offered to the flight-map track.
@@ -182,8 +182,8 @@ constexpr uint32_t BIOMETRIC_SENSOR_DEBUG_INTERVAL_MS = 5000;
  * blocking serial write each time at 115200 baud, which perturbs the
  * very loop timing being measured.
  */
-constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 1000;
-constexpr uint32_t STATE_LOG_INTERVAL_MS = 1000;
+constexpr uint32_t HEALTH_REPORT_INTERVAL_MS = 3000;
+constexpr uint32_t STATE_LOG_INTERVAL_MS = 3000;
 
 /*
  * Per-sample vario trace.

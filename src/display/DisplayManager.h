@@ -102,16 +102,12 @@ private:
     Adafruit_SH1107 display_{128, 128, &Wire};
 };
 
-class StartUpScreen;
-class PreTakeoffScreen;
-class VarioScreen;
 class VarioBarScreen;
 class AltitudeTraceScreen;
 class WindDirectionScreen;
 class FlightMapScreen;
 class FlightTrack;
 class SettingsScreen;
-class PowerOffScreen;
 class LandedScreen;
 
 class DisplayManager {
@@ -134,8 +130,7 @@ public:
     bool backgroundWhite_ = false;
     FlightRecorder* recorder() const;
     SimpleDisplay& display();
-    bool isPowerOffScreen() const { return activeScreen_ == ScreenId::PowerOff; }
-    bool isPreTakeoffScreen() const { return activeScreen_ == ScreenId::PreTakeoff; }
+    bool isVarioBarScreen() const { return activeScreen_ == ScreenId::VarioBar; }
     bool isPoweringOff() const { return powerManager_ != nullptr && powerManager_->shouldPowerOff(); }
 
     // Clears the OLED and pushes the blank frame. Called once shutdown
@@ -148,18 +143,14 @@ private:
     void drawCurrentScreen(const FlightData& data);
     void setScreen(ScreenId screen);
 
-    ScreenId activeScreen_ = ScreenId::StartUp;
-    ScreenId lastScreen_ = ScreenId::StartUp;
+    ScreenId activeScreen_ = ScreenId::VarioBar;
+    ScreenId lastScreen_ = ScreenId::VarioBar;
     FlightState currentFlightState_ = FlightState::PREFLIGHT;
-    StartUpScreen* startupScreen_ = nullptr;
-    PreTakeoffScreen* preTakeoffScreen_ = nullptr;
-    VarioScreen* variometerScreen_ = nullptr;
     VarioBarScreen* varioBarScreen_ = nullptr;
     AltitudeTraceScreen* altitudeTraceScreen_ = nullptr;
     WindDirectionScreen* windDirectionScreen_ = nullptr;
     FlightMapScreen* flightMapScreen_ = nullptr;
     SettingsScreen* settingsScreen_ = nullptr;
-    PowerOffScreen* powerOffScreen_ = nullptr;
     LandedScreen* landedScreen_ = nullptr;
     bool initialized_ = false;
     bool manualSelectionActive_ = false;

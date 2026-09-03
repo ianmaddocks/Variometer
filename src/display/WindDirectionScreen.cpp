@@ -327,8 +327,11 @@ void WindDirectionScreen::drawVarioGauge(DisplayManager& display,
 void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) {
     const bool haveWind = (data.windConfidence > kMinConfidence);
 
-    // See VarioScreen.cpp for why this is compiled out entirely in
-    // release builds rather than left as a DBGLN no-op.
+    // Compiled out entirely in release builds rather than left as a
+    // DBGLN no-op: DBGLN alone being a no-op still leaves this String
+    // concatenation running unconditionally at the screen's redraw
+    // rate, and Arduino String's heap allocation on every '+' is
+    // exactly what should be avoided in a high-frequency loop.
 #ifdef DEBUG
     String status = "Wind: " + String(haveWind ? data.windSpeed : 0.0f, 1) + "m/s " +
                     String(static_cast<int>(data.windDirection)) + "deg conf " +
