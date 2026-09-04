@@ -72,14 +72,18 @@ struct FlightData {
     uint32_t recordingDurationS = 0;
 
     // Read-only mirror of the DeviceSettings fields that actually drive
-    // something (audio/haptic vario feedback, replay speed), refreshed by
+    // something (audio/haptic vario feedback, replay speed, the takeoff
+    // satellite gate, display invert), refreshed by
     // Application::applySettings() whenever they change. Lets both the
     // on-device Settings screen and the web Settings page display the
     // settings currently in effect without either needing its own pointer
-    // back to DeviceSettings.
+    // back to DeviceSettings. Also how FlightDetector reads minSatellites,
+    // rather than taking a second pointer to DeviceSettings itself.
     bool audioVarioEnabled = false;
     bool hapticVarioEnabled = true;
     uint8_t replaySpeed = 4;
+    uint8_t minSatellites = Config::MIN_SATELLITES_DEFAULT;
+    bool backgroundWhite = false;
 };
 
 }  // namespace variometer

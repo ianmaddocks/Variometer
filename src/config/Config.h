@@ -160,6 +160,7 @@ constexpr uint32_t MANUAL_LOG_SAMPLE_INTERVAL_MS = 500;
 constexpr char WIFI_AP_SSID[] = "Variometer";
 constexpr char WIFI_AP_PASSWORD[] = "";
 constexpr uint8_t WIFI_AP_CHANNEL = 6;
+constexpr char WIFI_AP_IP_ADDRESS[] = "192.168.4.1";
 constexpr uint32_t BATTERY_UPDATE_INTERVAL_MS = 5000;
 constexpr float BATTERY_DIVIDER_RATIO = 2.0f;
 constexpr float BATTERY_MIN_VOLTAGE = 3.2f;

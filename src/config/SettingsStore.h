@@ -11,11 +11,12 @@ namespace SettingsStore {
 // partitions.csv, so this needs no filesystem of its own.
 void load(DeviceSettings& settings);
 
-// Persists the fields that are actually wired to device behaviour
-// (audio/haptic vario, replay speed). minSatellites/backgroundWhite are
-// deliberately not persisted here -- see DisplayManager's edit-mode
-// fields for why: they aren't read by anything yet, so saving them would
-// just be NVS writes for values nothing acts on.
+// Persists the fields that are actually wired to device behaviour: audio
+// vario, haptic vario, 3D replay speed, the takeoff satellite gate
+// (FlightDetector), and display invert. altitudeTraceMinutes and
+// initialFlightScreen are deliberately not persisted -- nothing reads
+// them yet, so saving them would just be NVS writes for values nothing
+// acts on.
 void save(const DeviceSettings& settings);
 
 }  // namespace SettingsStore

@@ -68,25 +68,46 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print("m/s State:");
     display.display().print(static_cast<int>(data.flightState));
 
-    // Read-only: these are edited from the web Settings page (WiFi AP),
-    // not here -- see FlightLogStorage's /settings route.
-    display.display().setCursor(0, line++ * Config::LINE_SPACING);
-    display.display().print("Audio:");
-    display.display().print(data.audioVarioEnabled ? "On" : "Off");
-    display.display().print(" Haptic:");
-    display.display().print(data.hapticVarioEnabled ? "On" : "Off");
-    display.display().setCursor(0, line++ * Config::LINE_SPACING);
-    display.display().print("Replay:");
-    display.display().print(static_cast<int>(data.replaySpeed));
-    display.display().print("x  (edit via WiFi)");
-
-    //todo: allow min satellites to be changed in settings
     //todo: allow Alt Trace sampling to be adjusted and ring buffer size to be changed in settings
 
-    if (display.settingsEditMode_) {
-        display.display().setCursor(0, line++ * Config::LINE_SPACING);
-        display.display().print(">");
-    }
+    /*
+     * Editable settings list. A press (DisplayManager::handleButtonPress)
+     * enters edit mode on the first field, steps to the next field on
+     * each subsequent press, and exits back to screen navigation once it
+     * steps past the last one; rotating the encoder while a field is
+     * selected changes that field's value
+     * (DisplayManager::handleEncoderDelta). The '>' cursor is only drawn
+     * while editing -- with edit mode off this list is read-only, showing
+     * whatever was last set here or from the web Settings page.
+     */
+    const bool editing = display.settingsEditMode_;
+    const uint8_t selected = display.settingsEditIndex_;
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldMinSatellites) ? ">" : " ");
+    display.display().print("MinSat:");
+    display.display().print(static_cast<int>(data.minSatellites));
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldAudioVario) ? ">" : " ");
+    display.display().print("Audio:");
+    display.display().print(data.audioVarioEnabled ? "On" : "Off");
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldHapticVario) ? ">" : " ");
+    display.display().print("Haptic:");
+    display.display().print(data.hapticVarioEnabled ? "On" : "Off");
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldReplaySpeed) ? ">" : " ");
+    display.display().print("Replay:");
+    display.display().print(static_cast<int>(data.replaySpeed));
+    display.display().print("x");
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldBackgroundWhite) ? ">" : " ");
+    display.display().print("Invert:");
+    display.display().print(data.backgroundWhite ? "On" : "Off");
 }
 
 void SettingsScreen::exit() {}

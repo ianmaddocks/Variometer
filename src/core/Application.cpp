@@ -75,10 +75,13 @@ void Application::begin() {
     applySettings();
     buzzer_.playStartupTune();
 
-    // Pointers, not copies: the web Settings/Vario pages read and edit
-    // these live, and must outlive FlightLogStorage's WebServer callbacks.
+    // Pointers, not copies: the web Settings/Vario pages and the
+    // on-device Settings screen read and edit these live, and must
+    // outlive FlightLogStorage's WebServer callbacks / DisplayManager's
+    // encoder handling.
     flightLogStorage_.setFlightData(&flightData_);
     flightLogStorage_.setSettings(&settings_);
+    display_.setSettings(&settings_);
 
     // BLE stack init is independent of the I2C bus and sensors above, so
     // it does not need to sit before or after any of that setup.
@@ -202,10 +205,13 @@ void Application::applySettings() {
     buzzer_.setEnabled(settings_.audioVarioEnabled);
     haptic_.setEnabled(settings_.hapticVarioEnabled);
     display_.setReplaySpeed(settings_.replaySpeed);
+    display_.setBackgroundWhite(settings_.backgroundWhite);
 
     flightData_.audioVarioEnabled = settings_.audioVarioEnabled;
     flightData_.hapticVarioEnabled = settings_.hapticVarioEnabled;
     flightData_.replaySpeed = settings_.replaySpeed;
+    flightData_.minSatellites = settings_.minSatellites;
+    flightData_.backgroundWhite = settings_.backgroundWhite;
 }
 
 void Application::loop() {
@@ -214,14 +220,20 @@ void Application::loop() {
 
     flightLogStorage_.update();
 
-    // The web Settings page writes straight into settings_ (see
-    // FlightLogStorage::setSettings()) and only flags that it did so,
-    // rather than pushing the change to hardware/NVS itself -- that
+    // The web Settings page and the on-device Settings screen both write
+    // straight into settings_ (see FlightLogStorage::setSettings() and
+    // DisplayManager::setSettings()) and only flag that they did so,
+    // rather than pushing the change to hardware/NVS themselves -- that
     // belongs here, alongside every other settings write.
     if (flightLogStorage_.consumeSettingsChanged()) {
         SettingsStore::save(settings_);
         applySettings();
         DBGLN("Settings updated via web UI");
+    }
+    if (display_.consumeSettingsChanged()) {
+        SettingsStore::save(settings_);
+        applySettings();
+        DBGLN("Settings updated via on-device edit mode");
     }
 
     // The web Vario page's start/stop button goes through the same

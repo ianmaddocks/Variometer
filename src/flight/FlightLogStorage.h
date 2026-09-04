@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <DNSServer.h>
 #include <LittleFS.h>
 #include <WebServer.h>
 
@@ -79,6 +80,7 @@ private:
     String makeStartName(const GPS::DateTime& startTime) const;
 
     WebServer* server_ = nullptr;
+    DNSServer dnsServer_;
     File activeFile_;
     String activePath_;
     uint32_t lastFlushMs_ = 0;

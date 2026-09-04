@@ -9,6 +9,7 @@
 #include "display/VarioScreen.h"
 #include "display/WindDirectionScreen.h"
 #include "display/FlightMapScreen.h"
+#include "display/WifiQrScreen.h"
 
 namespace variometer {
 namespace {
@@ -122,7 +123,8 @@ DisplayManager::DisplayManager()
       windDirectionScreen_(new WindDirectionScreen()),
       flightMapScreen_(new FlightMapScreen()),
       settingsScreen_(new SettingsScreen()),
-      landedScreen_(new LandedScreen()) {}
+    landedScreen_(new LandedScreen()),
+    wifiQrScreen_(new WifiQrScreen()) {}
 
 SimpleDisplay& DisplayManager::display() {
     return display_;
@@ -175,6 +177,7 @@ void DisplayManager::setScreen(ScreenId screen) {
         }
     }
     if (previous == ScreenId::Landed) landedScreen_->exit();
+    if (previous == ScreenId::WifiQr) wifiQrScreen_->exit();
 
     if (screen == ScreenId::VarioBar) varioBarScreen_->enter();
     if (screen == ScreenId::AltitudeTrace) altitudeTraceScreen_->enter();
@@ -182,6 +185,7 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (screen == ScreenId::FlightMap) flightMapScreen_->enter();
     if (screen == ScreenId::Settings) settingsScreen_->enter();
     if (screen == ScreenId::Landed) landedScreen_->enter();
+    if (screen == ScreenId::WifiQr) wifiQrScreen_->enter();
 }
 
 void DisplayManager::updateScreenSelection(const FlightData& data) {
@@ -276,6 +280,9 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         case ScreenId::Landed:
             landedScreen_->draw(*this, data);
             break;
+        case ScreenId::WifiQr:
+            wifiQrScreen_->draw(*this, data);
+            break;
     }
 
     drawCommonStatusBar(display_, data, activeScreen_);
@@ -291,21 +298,50 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
 
     if (activeScreen_ == ScreenId::Settings) {
         if (settingsEditMode_) {
-            if (settingsEditIndex_ == 0) {
-                if (delta > 0) {
-                    if (minSatellitesSetting_ < 10) {
-                        ++minSatellitesSetting_;
-                    }
-                } else if (minSatellitesSetting_ > 0) {
-                    --minSatellitesSetting_;
-                }
-            } else if (settingsEditIndex_ == 1) {
-                audioEnabled_ = !audioEnabled_;
-            } else {
-                backgroundWhite_ = !backgroundWhite_;
+            if (settings_ == nullptr) {
+                return;
             }
-            DBGF("Settings edit item=%u value=%u\n", static_cast<unsigned>(settingsEditIndex_),
-                 static_cast<unsigned>(settingsEditIndex_ == 0 ? minSatellitesSetting_ : (audioEnabled_ ? 1 : 0)));
+
+            switch (settingsEditIndex_) {
+                case SettingsFieldMinSatellites:
+                    // Below 3, a GPS fix is barely meaningful at all;
+                    // above 12 there is little left to gain and the
+                    // pilot could accidentally dial takeoff detection
+                    // out of reach of the receiver's typical fix.
+                    if (delta > 0 && settings_->minSatellites < 12) {
+                        ++settings_->minSatellites;
+                    } else if (delta < 0 && settings_->minSatellites > 3) {
+                        --settings_->minSatellites;
+                    }
+                    break;
+                case SettingsFieldAudioVario:
+                    if (delta != 0) {
+                        settings_->audioVarioEnabled = !settings_->audioVarioEnabled;
+                    }
+                    break;
+                case SettingsFieldHapticVario:
+                    if (delta != 0) {
+                        settings_->hapticVarioEnabled = !settings_->hapticVarioEnabled;
+                    }
+                    break;
+                case SettingsFieldReplaySpeed:
+                    if (delta > 0 && settings_->replaySpeed < 10) {
+                        ++settings_->replaySpeed;
+                    } else if (delta < 0 && settings_->replaySpeed > 1) {
+                        --settings_->replaySpeed;
+                    }
+                    break;
+                case SettingsFieldBackgroundWhite:
+                    if (delta != 0) {
+                        settings_->backgroundWhite = !settings_->backgroundWhite;
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            settingsChanged_ = true;
+            DBGF("Settings edit item=%u\n", static_cast<unsigned>(settingsEditIndex_));
             return;
         }
     }
@@ -326,10 +362,9 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     ScreenId nextScreen = activeScreen_;
 
     if (currentFlightState_ == FlightState::PREFLIGHT) {
-        // VarioBar is the default preflight screen; the only other screen
-        // reachable from it before takeoff is Settings.
-        static const ScreenId preflightOrder[] = {ScreenId::VarioBar, ScreenId::Settings};
-        constexpr int count = 2;
+        static const ScreenId preflightOrder[] = {ScreenId::VarioBar, ScreenId::Settings,
+                              ScreenId::WifiQr};
+        constexpr int count = 3;
         for (int i = 0; i < count; ++i) {
             if (preflightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -340,8 +375,9 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
     } else if (currentFlightState_ == FlightState::FLIGHT || currentFlightState_ == FlightState::TAKEOFF_DETECTED) {
         static const ScreenId inFlightOrder[] = {ScreenId::VarioBar,
                                                  ScreenId::WindDirection, ScreenId::FlightMap,
-                                                 ScreenId::AltitudeTrace, ScreenId::Settings};
-        constexpr int count = 5;
+                                                 ScreenId::AltitudeTrace, ScreenId::Settings,
+                                                 ScreenId::WifiQr};
+        constexpr int count = 6;
         for (int i = 0; i < count; ++i) {
             if (inFlightOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -351,8 +387,9 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
         }
     } else if (currentFlightState_ == FlightState::LANDING_DETECTED || currentFlightState_ == FlightState::POST_FLIGHT) {
         static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::FlightMap,
-                                               ScreenId::AltitudeTrace, ScreenId::Settings};
-        constexpr int count = 4;
+                                               ScreenId::AltitudeTrace, ScreenId::Settings,
+                                               ScreenId::WifiQr};
+        constexpr int count = 5;
         for (int i = 0; i < count; ++i) {
             if (landedOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -371,7 +408,19 @@ void DisplayManager::handleButtonPress() {
         if (!settingsEditMode_) {
             enterSettingsEditMode();
         } else {
-            exitSettingsEditMode();
+            /*
+             * A press steps to the next field; once past the last one it
+             * exits edit mode back to screen navigation, rather than
+             * needing a second, different gesture to leave editing. SW1
+             * and SW2 are both already dedicated to one unambiguous
+             * meaning each (manual recording, hardware takeoff -- see
+             * their handling in Application::loop()), so this is the
+             * only spare button on this screen.
+             */
+            ++settingsEditIndex_;
+            if (settingsEditIndex_ >= SettingsFieldCount) {
+                exitSettingsEditMode();
+            }
         }
         return;
     }
@@ -399,6 +448,18 @@ void DisplayManager::exitSettingsEditMode() {
     settingsEditMode_ = false;
     settingsEditIndex_ = 0;
     DBGLN("Settings edit mode disabled");
+}
+
+bool DisplayManager::consumeSettingsChanged() {
+    if (!settingsChanged_) {
+        return false;
+    }
+    settingsChanged_ = false;
+    return true;
+}
+
+void DisplayManager::setBackgroundWhite(bool white) {
+    display_.invertDisplay(white);
 }
 
 void DisplayManager::setPowerManager(PowerManager* powerManager) {

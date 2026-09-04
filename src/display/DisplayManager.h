@@ -98,6 +98,10 @@ public:
         display_.display();
     }
 
+    void invertDisplay(bool invert) {
+        display_.invertDisplay(invert);
+    }
+
 private:
     Adafruit_SH1107 display_{128, 128, &Wire};
 };
@@ -109,9 +113,23 @@ class FlightMapScreen;
 class FlightTrack;
 class SettingsScreen;
 class LandedScreen;
+class WifiQrScreen;
 
 class DisplayManager {
 public:
+    // Order fixes each field's cursor position in the on-device Settings
+    // list (SettingsScreen::draw()) and its edit slot in
+    // handleEncoderDelta(); SettingsFieldCount is the wrap point where a
+    // press exits edit mode rather than selecting another field.
+    enum SettingsField : uint8_t {
+        SettingsFieldMinSatellites = 0,
+        SettingsFieldAudioVario,
+        SettingsFieldHapticVario,
+        SettingsFieldReplaySpeed,
+        SettingsFieldBackgroundWhite,
+        SettingsFieldCount
+    };
+
     DisplayManager();
     void begin();
     void update(const FlightData& data);
@@ -123,11 +141,20 @@ public:
     void setRecorder(FlightRecorder* recorder);
     void setTrack(FlightTrack* track);
     void setReplaySpeed(uint8_t speed);
+    void setBackgroundWhite(bool white);
+
+    // Settings the on-device edit mode (encoder press + rotate on the
+    // Settings screen) edits directly. The pointer must outlive this
+    // object (Application owns both for its lifetime).
+    void setSettings(DeviceSettings* settings) { settings_ = settings; }
+
+    // True once after an on-device settings edit; the owner is expected
+    // to persist and re-apply settings_ in response, same as the web
+    // Settings page's equivalent flag. Consuming clears it.
+    bool consumeSettingsChanged();
+
     bool settingsEditMode_ = false;
     uint8_t settingsEditIndex_ = 0;
-    uint8_t minSatellitesSetting_ = Config::MIN_SATELLITES_DEFAULT;
-    bool audioEnabled_ = true;
-    bool backgroundWhite_ = false;
     FlightRecorder* recorder() const;
     SimpleDisplay& display();
     bool isVarioBarScreen() const { return activeScreen_ == ScreenId::VarioBar; }
@@ -152,12 +179,15 @@ private:
     FlightMapScreen* flightMapScreen_ = nullptr;
     SettingsScreen* settingsScreen_ = nullptr;
     LandedScreen* landedScreen_ = nullptr;
+    WifiQrScreen* wifiQrScreen_ = nullptr;
     bool initialized_ = false;
     bool manualSelectionActive_ = false;
     FlightRecorder* recorder_ = nullptr;
     FlightTrack* track_ = nullptr;
     PowerManager* powerManager_ = nullptr;
     SimpleDisplay display_;
+    DeviceSettings* settings_ = nullptr;
+    bool settingsChanged_ = false;
 };
 
 }  // namespace variometer

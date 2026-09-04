@@ -137,6 +137,11 @@ void FlightLogStorage::begin() {
     }
 
     WiFi.mode(WIFI_AP);
+    IPAddress apAddress;
+    if (!apAddress.fromString(Config::WIFI_AP_IP_ADDRESS) ||
+        !WiFi.softAPConfig(apAddress, apAddress, IPAddress(255, 255, 255, 0))) {
+        DBGLN("WiFi AP address configuration failed");
+    }
     WiFi.softAP(Config::WIFI_AP_SSID, Config::WIFI_AP_PASSWORD, Config::WIFI_AP_CHANNEL);
 
     /*
@@ -172,7 +177,12 @@ void FlightLogStorage::begin() {
                      }
                  },
                  [this]() { handleFirmwareUpload(); });
+    webServer.onNotFound([]() {
+        webServer.sendHeader("Location", "/");
+        webServer.send(302, "text/plain", "");
+    });
     webServer.begin();
+    dnsServer_.start(53, "*", WiFi.softAPIP());
 
     DBGF("WiFi AP ready: %s, address %s\n", Config::WIFI_AP_SSID,
          WiFi.softAPIP().toString().c_str());
@@ -186,6 +196,7 @@ void FlightLogStorage::stopNetwork() {
 
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
+    dnsServer_.stop();
 
     DBGLN("FlightLogStorage: WiFi AP stopped");
 }
@@ -193,6 +204,7 @@ void FlightLogStorage::stopNetwork() {
 void FlightLogStorage::update() {
     if (server_ != nullptr) {
         server_->handleClient();
+        dnsServer_.processNextRequest();
     }
     if (active_ && millis() - lastFlushMs_ >= Config::FLIGHT_LOG_FLUSH_INTERVAL_MS) {
         activeFile_.flush();
@@ -442,6 +454,14 @@ void FlightLogStorage::handleSettingsPage() {
                 "<input type=\"number\" id=\"replay\" name=\"replay\" min=\"1\" max=\"10\" value=\"";
         html += String(settings_->replaySpeed);
         html += "\">"
+                "<label for=\"minsat\">Min satellites to detect takeoff</label>"
+                "<input type=\"number\" id=\"minsat\" name=\"minsat\" min=\"3\" max=\"12\" value=\"";
+        html += String(settings_->minSatellites);
+        html += "\">"
+                "<div class=\"toggle-row\"><span>Invert display (white background)</span>"
+                "<input type=\"checkbox\" name=\"invert\"";
+        html += settings_->backgroundWhite ? " checked" : "";
+        html += "></div>"
                 "<div style=\"margin-top:16px;\"><input type=\"submit\" value=\"Save Settings\"></div>"
                 "</form>";
     }
@@ -469,6 +489,13 @@ void FlightLogStorage::handleSettingsSave() {
     if (replay < 1) replay = 1;
     if (replay > 10) replay = 10;
     settings_->replaySpeed = static_cast<uint8_t>(replay);
+
+    int minSat = webServer.arg("minsat").toInt();
+    if (minSat < 3) minSat = 3;
+    if (minSat > 12) minSat = 12;
+    settings_->minSatellites = static_cast<uint8_t>(minSat);
+
+    settings_->backgroundWhite = webServer.hasArg("invert");
 
     settingsChanged_ = true;
 
