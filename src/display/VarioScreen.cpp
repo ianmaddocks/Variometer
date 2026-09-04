@@ -65,6 +65,17 @@ constexpr int16_t kLabelSize = 1;
 constexpr int16_t kFooterValueSize = 3;
 constexpr int16_t kBigFigureSize = 4;
 
+#ifdef DEBUG
+// TEMPORARY -- see the matching members in VarioScreen.h. Same SH1107
+// SETDISPLAYCLOCKDIV (0xD5) values as WifiQrScreen.cpp, which has the
+// full writeup of why this reduces rolling-shutter camera banding:
+// divide-by-1 (0x50) doubles the panel's row-scan rate versus the
+// vendor-default divide-by-2 (0x51) that Adafruit_SH1107::begin() leaves
+// it at.
+constexpr uint8_t kFastClockDiv = 0x50;
+constexpr uint8_t kNormalClockDiv = 0x51;
+#endif
+
 int16_t textWidth(const char* s, int16_t size) {
     return static_cast<int16_t>(strlen(s)) * kFontAdvanceW * size;
 }
@@ -149,6 +160,9 @@ void formatFooterField(char* buf, size_t n, VarioBarFooterField f,
 }  // namespace
 
 void VarioBarScreen::enter() {
+#ifdef DEBUG
+    fastClockApplied_ = false;  // TEMPORARY -- see VarioScreen.h
+#endif
     DBGLN("Entering vario bar screen");
 }
 
@@ -258,6 +272,17 @@ void VarioBarScreen::drawFooter(DisplayManager& display, const FlightData& data)
 }
 
 void VarioBarScreen::draw(DisplayManager& display, const FlightData& data) {
+#ifdef DEBUG
+    // TEMPORARY -- see VarioScreen.h. Sent once per visit, not every
+    // redraw, even though this screen redraws every cycle (unlike
+    // WifiQrScreen, still wanted live here for the video).
+    lastDisplay_ = &display;
+    if (!fastClockApplied_) {
+        display.display().sendCommand(SH110X_SETDISPLAYCLOCKDIV, kFastClockDiv);
+        fastClockApplied_ = true;
+    }
+#endif
+
     display.display().setTextColor(SH110X_WHITE);
     drawBar(display, data);
     drawNumeric(display, data);
@@ -266,6 +291,13 @@ void VarioBarScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().setTextSize(1);
 }
 
-void VarioBarScreen::exit() {}
+void VarioBarScreen::exit() {
+#ifdef DEBUG
+    // TEMPORARY -- see VarioScreen.h
+    if (lastDisplay_ != nullptr) {
+        lastDisplay_->display().sendCommand(SH110X_SETDISPLAYCLOCKDIV, kNormalClockDiv);
+    }
+#endif
+}
 
 }  // namespace variometer

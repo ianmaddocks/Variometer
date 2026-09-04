@@ -64,18 +64,21 @@ private:
 
     VarioBarFooterField footerField_ = VarioBarFooterField::AltAgl;
 
+#ifdef DEBUG
     /*
      * TEMPORARY -- for filming this screen to show UI layout bugs without
      * rolling-shutter banding from the SH1107's row-scan rate (see
      * WifiQrScreen.cpp for the original writeup of why this works). Unlike
      * WifiQrScreen this screen redraws every cycle on purpose (live vario
      * data), so only the panel-side clock-div speedup applies here, not
-     * WifiQrScreen's "draw once" trick. Remove fastClockApplied_,
-     * lastDisplay_, and their use in enter()/draw()/exit() once the video
-     * capture is done.
+     * WifiQrScreen's "draw once" trick. #ifdef'd out rather than deleted
+     * so it's there whenever DEBUG is defined (which platformio.ini
+     * currently always sets) but compiles out of a real release build.
+     * Remove entirely, ifdef and all, once no longer needed.
      */
     bool fastClockApplied_ = false;
     DisplayManager* lastDisplay_ = nullptr;
+#endif
 };
 
 }  // namespace variometer
