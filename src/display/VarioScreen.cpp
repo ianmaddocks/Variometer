@@ -21,7 +21,7 @@ constexpr int16_t kScreenH = 128;
 
 // Climb bar
 constexpr int16_t kBarX = 2;
-constexpr int16_t kBarY = 15;
+constexpr int16_t kBarY = 14;
 constexpr int16_t kBarW = 14;
 constexpr int16_t kBarH = 78;
 constexpr int16_t kBarZeroY = kBarY + kBarH / 2;  // 54
@@ -39,10 +39,36 @@ constexpr int16_t kAvgValueX = 42;
 // Footer
 constexpr int16_t kFootRuleY = 94;
 constexpr int16_t kFootDividerX = 64;
-constexpr int16_t kFootLabelY = 106;
-constexpr int16_t kFootValueY = 124;
 constexpr int16_t kFootLeftX = 4;
 constexpr int16_t kFootRightX = 68;
+
+// Right edges for the two right-justified footer values (drawRight()),
+// each 4px clear of the boundary it sits against -- the divider for the
+// left column, the panel edge (matching kBigRight's own margin) for the
+// right one. Labels stay left-aligned; only the values, which vary in
+// digit count, need this to avoid running off their column.
+constexpr int16_t kFootLeftValueRight = kFootDividerX - 4;
+constexpr int16_t kFootRightValueRight = kBigRight;
+
+/*
+ * kFootLabelY/kFootValueY are baseline positions, like every other
+ * y-coordinate on this screen (see baselineToTopLeft() below) -- but
+ * unlike the rest, their values differ from screen-spec.md's 106/124.
+ * The built-in GLCD font's glyph height is 7px * size, so the footer
+ * VALUE at size 3 is 21px tall -- taller than the spec's 18px gap
+ * between its label and value baselines (124 - 106), which was sized for
+ * whatever shorter font the original U8g2 design intended for that row.
+ * No baseline/top-left conversion fixes that; the two rows need enough
+ * room between them regardless of positioning convention.
+ *
+ * These lay the footer out to exactly fill what's actually available
+ * between the rule (94) and the panel's bottom edge (128), all 34px of
+ * it, with a 2px gap on both sides of the label: rule -> +2 -> label
+ * (7px) -> +2 -> value (21px) -> +2 -> panel edge. That accounts for
+ * every pixel: 2+7+2+21+2 = 34.
+ */
+constexpr int16_t kFootLabelY = 103;
+constexpr int16_t kFootValueY = 126;
 
 /*
  * Fonts -- screen-spec.md's four U8g2 fonts collapse to three sizes of
@@ -61,7 +87,8 @@ constexpr int16_t kFootRightX = 68;
  * which SimpleDisplay does not expose.
  */
 constexpr int16_t kFontAdvanceW = 6;
-constexpr int16_t kLabelSize = 1;
+constexpr int16_t kSmlLabelSize = 1;
+constexpr int16_t kLrgLabelSize = 2;
 constexpr int16_t kFooterValueSize = 3;
 constexpr int16_t kBigFigureSize = 4;
 
@@ -80,11 +107,39 @@ int16_t textWidth(const char* s, int16_t size) {
     return static_cast<int16_t>(strlen(s)) * kFontAdvanceW * size;
 }
 
-void drawRight(DisplayManager& display, int16_t right, int16_t y,
+// Shrinks a footer value from kFooterValueSize down to kLrgLabelSize once
+// it's longer than 3 characters, so a wider reading (e.g. a 3-digit-plus
+// altitude, or "L/D" going negative) still fits its column instead of
+// running past kFootLeftValueRight/kFootRightValueRight regardless of
+// the right-justification in drawRight().
+int16_t footerValueSize(const char* s) {
+    return (strlen(s) <= 3) ? kFooterValueSize : kLrgLabelSize;
+}
+
+/*
+ * screen-spec.md's y-coordinates are baseline positions (bottom of the
+ * glyph -- this font has no descenders), inherited from the original
+ * U8g2/custom-GFXfont design where setCursor()'s y already means
+ * baseline. The built-in classic GLCD font used here positions text from
+ * the TOP-LEFT of the glyph cell instead, at every size -- not just for
+ * labels. ("The big figure and footer values... need custom fonts
+ * anyway, their y-coordinates transfer unchanged" was only ever true
+ * once a custom font actually ships; stage one still uses the built-in
+ * font for all three sizes, so all three need this.) A glyph is 7px tall
+ * per unit of size, so the correction is a constant 7 * size regardless
+ * of which constant it's applied to.
+ */
+constexpr int16_t kGlyphHeightPerSize = 7;
+
+int16_t baselineToTopLeft(int16_t baselineY, int16_t size) {
+    return baselineY - kGlyphHeightPerSize * size;
+}
+
+void drawRight(DisplayManager& display, int16_t right, int16_t baselineY,
               int16_t size, const char* s, uint16_t color) {
     display.display().setTextSize(static_cast<uint8_t>(size));
     display.display().setTextColor(color);
-    display.display().setCursor(right - textWidth(s, size), y);
+    display.display().setCursor(right - textWidth(s, size), baselineToTopLeft(baselineY, size));
     display.display().print(s);
 }
 
@@ -124,7 +179,8 @@ const char* footerFieldLabel(VarioBarFooterField f) {
         case VarioBarFooterField::GlideRatio:  return "L/D";
         case VarioBarFooterField::GroundSpeed: return "GS km/h";
         case VarioBarFooterField::AltAgl:      return "AGL m";
-        case VarioBarFooterField::FlightTime:  return "TIME";
+        case VarioBarFooterField::FlightTime:  return "TIME min";
+        case VarioBarFooterField::Count:       break;  // sentinel, unreachable
     }
     return "";
 }
@@ -148,12 +204,17 @@ void formatFooterField(char* buf, size_t n, VarioBarFooterField f,
             snprintf(buf, n, "%d", static_cast<int>(lroundf(data.relativeAltitude)));
             break;
         case VarioBarFooterField::FlightTime: {
-            const uint32_t secs = data.flightDuration;
-            snprintf(buf, n, "%lu:%02lu",
-                     static_cast<unsigned long>(secs / 3600),
-                     static_cast<unsigned long>((secs / 60) % 60));
+            // Minutes only, not H:MM -- at this footer slot's size-3 font
+            // and 60px available width (kFootRightX to the screen edge),
+            // "H:MM" needs 4 characters (72px) and ran off the panel,
+            // rendering as a truncated "0:0". Minutes alone tops out at 3
+            // digits for any realistic flight duration (54px).
+            const uint32_t mins = data.flightDuration / 60;
+            snprintf(buf, n, "%lu", static_cast<unsigned long>(mins));
             break;
         }
+        case VarioBarFooterField::Count:
+            break;  // sentinel, unreachable
     }
 }
 
@@ -233,19 +294,19 @@ void VarioBarScreen::drawNumeric(DisplayManager& display, const FlightData& data
     char buf[12];
     const float climb = applyDeadBand(data.verticalSpeed);
 
-    formatSigned(buf, sizeof(buf), clampToScale(climb));
+    formatSigned(buf, sizeof(buf), clampToScale(climb)); //clamp to +/-5.0
     drawRight(display, kBigRight, kBigBaseline, kBigFigureSize, buf, SH110X_WHITE);
 
     display.display().setTextColor(SH110X_WHITE);
-    display.display().setTextSize(kLabelSize);
-    display.display().setCursor(kAvgLabelX, kAvgBaseline);
+    display.display().setTextSize(kSmlLabelSize);
+    display.display().setCursor(kAvgLabelX, baselineToTopLeft(kAvgBaseline, kSmlLabelSize));
     display.display().print("AVG");
-    drawRight(display, kBigRight, kAvgBaseline, kLabelSize, "m/s", SH110X_WHITE);
+    drawRight(display, kBigRight, kAvgBaseline, kLrgLabelSize, "m/s", SH110X_WHITE);
 
     formatSigned(buf, sizeof(buf), applyDeadBand(data.verticalSpeedAverage30s));
-    display.display().setTextSize(kLabelSize);
+    display.display().setTextSize(kSmlLabelSize);
     display.display().setTextColor(SH110X_WHITE);
-    display.display().setCursor(kAvgValueX, kAvgBaseline);
+    display.display().setCursor(kAvgValueX, baselineToTopLeft(kAvgBaseline, kSmlLabelSize));
     display.display().print(buf);
 }
 
@@ -255,20 +316,17 @@ void VarioBarScreen::drawFooter(DisplayManager& display, const FlightData& data)
     dottedVLine(display, kFootDividerX, kFootRuleY + 4, kScreenH - kFootRuleY - 6);
 
     display.display().setTextColor(SH110X_WHITE);
-    display.display().setTextSize(kLabelSize);
-    display.display().setCursor(kFootLeftX, kFootLabelY);
+    display.display().setTextSize(kSmlLabelSize);
+    display.display().setCursor(kFootLeftX, baselineToTopLeft(kFootLabelY, kSmlLabelSize));
     display.display().print("ALT m");
-    display.display().setCursor(kFootRightX, kFootLabelY);
+    display.display().setCursor(kFootRightX, baselineToTopLeft(kFootLabelY, kSmlLabelSize));
     display.display().print(footerFieldLabel(footerField_));
 
-    display.display().setTextSize(kFooterValueSize);
     snprintf(buf, sizeof(buf), "%d", static_cast<int>(lroundf(data.barometricAltitude)));
-    display.display().setCursor(kFootLeftX, kFootValueY);
-    display.display().print(buf);
+    drawRight(display, kFootLeftValueRight, kFootValueY, footerValueSize(buf), buf, SH110X_WHITE);
 
     formatFooterField(buf, sizeof(buf), footerField_, data);
-    display.display().setCursor(kFootRightX, kFootValueY);
-    display.display().print(buf);
+    drawRight(display, kFootRightValueRight, kFootValueY, footerValueSize(buf), buf, SH110X_WHITE);
 }
 
 void VarioBarScreen::draw(DisplayManager& display, const FlightData& data) {
@@ -298,6 +356,11 @@ void VarioBarScreen::exit() {
         lastDisplay_->display().sendCommand(SH110X_SETDISPLAYCLOCKDIV, kNormalClockDiv);
     }
 #endif
+}
+
+void VarioBarScreen::cycleFooterField() {
+    const uint8_t next = static_cast<uint8_t>(footerField_) + 1;
+    footerField_ = static_cast<VarioBarFooterField>(next % static_cast<uint8_t>(VarioBarFooterField::Count));
 }
 
 }  // namespace variometer

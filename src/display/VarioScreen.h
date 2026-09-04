@@ -5,11 +5,12 @@
 namespace variometer {
 
 /*
- * Right-hand footer field, ported from screen-spec.md's VarioField enum
- * for when field-cycling on a button press is wired up (see the spec's
- * open items) -- only VarioBarFooterField::AltAgl is implemented today;
- * GlideRatio has no data source yet (see formatFooterField() in the
- * .cpp) and the field is not currently switchable at all.
+ * Right-hand footer field, ported from screen-spec.md's VarioField enum.
+ * Cycled by VarioBarScreen::cycleFooterField() on an encoder press.
+ * GlideRatio has no data source yet -- formatFooterField() shows "--" for
+ * it rather than a computed value, which is fine to cycle through, just
+ * not useful yet (see its own comment for why a real L/D reading needs
+ * gating/smoothing before it's worth showing).
  *
  * Kept at namespace scope, not nested in VarioBarScreen, so the free
  * helper functions in VarioBarScreen.cpp's anonymous namespace (mirroring
@@ -21,6 +22,7 @@ enum class VarioBarFooterField : uint8_t {
     GroundSpeed,
     AltAgl,
     FlightTime,
+    Count  // sentinel, not a real field -- see VarioBarScreen::cycleFooterField()
 };
 
 /*
@@ -44,11 +46,13 @@ enum class VarioBarFooterField : uint8_t {
  *   - The dashed 30s-average marker on the bar chooses solid black or
  *     white by testing whether its y falls inside the filled region,
  *     rather than an XOR draw mode.
- *   - All non-font, non-status layout coordinates are unchanged from
- *     screen-spec.md. Adafruit GFX's built-in font positions text from
- *     the top-left of the glyph cell, not the baseline U8g2 used, so
- *     text sits somewhat lower on screen than the original design
- *     intended -- see screen-spec.md for the resulting pixel offsets.
+ *   - All layout coordinates are unchanged from screen-spec.md and are
+ *     still named/read as baseline positions in the .cpp, but every text
+ *     draw converts through baselineToTopLeft() before reaching
+ *     setCursor(): Adafruit GFX's built-in font positions text from the
+ *     top-left of the glyph cell, not the baseline U8g2 used, so the
+ *     spec's y-values need that conversion to land where the spec
+ *     intends rather than 7px-per-size-unit lower.
  */
 class VarioBarScreen : public Screen {
 public:
@@ -56,6 +60,15 @@ public:
     void update(const FlightData& data) override;
     void draw(DisplayManager& display, const FlightData& data) override;
     void exit() override;
+
+    // Advances the right-hand footer field to the next entry in
+    // VarioBarFooterField, wrapping back to GlideRatio after FlightTime.
+    // Called from DisplayManager::handleButtonPress() on an encoder
+    // press, not SW1 -- SW1 is dedicated to manual recording start/stop
+    // everywhere else in the app (see Application::loop()), so it isn't
+    // repurposed here just because this happens to be the screen showing
+    // the footer.
+    void cycleFooterField();
 
 private:
     void drawBar(DisplayManager& display, const FlightData& data) const;

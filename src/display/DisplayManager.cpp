@@ -417,10 +417,10 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
             }
         }
     } else if (currentFlightState_ == FlightState::LANDING_DETECTED || currentFlightState_ == FlightState::POST_FLIGHT) {
-        static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::FlightMap,
-                                               ScreenId::AltitudeTrace, ScreenId::Settings,
-                                               ScreenId::WifiQr};
-        constexpr int count = 5;
+        static const ScreenId landedOrder[] = {ScreenId::Landed, ScreenId::VarioBar,
+                                               ScreenId::FlightMap, ScreenId::AltitudeTrace,
+                                               ScreenId::Settings, ScreenId::WifiQr};
+        constexpr int count = 6;
         for (int i = 0; i < count; ++i) {
             if (landedOrder[i] == activeScreen_) {
                 const int nextIndex = (i + delta + count) % count;
@@ -463,6 +463,19 @@ void DisplayManager::handleButtonPress() {
      */
     if (activeScreen_ == ScreenId::FlightMap) {
         flightMapScreen_->toggleViewMode(currentFlightState_);
+        return;
+    }
+
+    /*
+     * On VarioBar, a press cycles the footer's right-hand field. This is
+     * the encoder button, not SW1 -- SW1 is dedicated to manual recording
+     * start/stop everywhere else in the app (see Application::loop()),
+     * and VarioBar is the forced/default screen for the entire FLIGHT
+     * state, so overloading SW1 here specifically would reintroduce the
+     * per-press ambiguity that was deliberately designed out of it.
+     */
+    if (activeScreen_ == ScreenId::VarioBar) {
+        varioBarScreen_->cycleFooterField();
         return;
     }
 

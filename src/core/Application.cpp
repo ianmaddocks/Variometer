@@ -45,8 +45,8 @@ void Application::begin() {
     gps_.begin();
     biometricSensor_.begin();
     encoder_.begin();
-    sw1Button_.begin(Config::SW1_PIN, "SW1");
-    sw2Button_.begin(Config::SW2_PIN, "SW2");
+    sw1Button_.begin(Config::GRN_SW_PIN, "SW1");
+    sw2Button_.begin(Config::RED_SW_PIN, "SW2");
     batteryMonitor_.begin();
     powerManager_.begin();
     buzzer_.begin();
