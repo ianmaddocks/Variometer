@@ -173,7 +173,7 @@ constexpr uint32_t ENCODER_I2C_ADDRESS = 0x01;
 constexpr uint8_t ENCODER_DOUBLE_PRESS_PERIOD = 50;
 
 constexpr uint32_t BIOMETRIC_SENSOR_UPDATE_INTERVAL_MS = 20;
-constexpr uint32_t BIOMETRIC_SENSOR_DEBUG_INTERVAL_MS = 5000;
+constexpr uint32_t BIOMETRIC_SENSOR_DEBUG_INTERVAL_MS = 60000;
 
 /*
  * Interval for the consolidated HEALTH line.

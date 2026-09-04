@@ -35,7 +35,7 @@ struct LogSample {
  * for flight-log download before the other pages existed, and every page
  * here shares that one server and the same WiFi AP lifecycle.
  */
-class FlightLogStorage {
+class WebUI {
 public:
     void begin();
     void update();

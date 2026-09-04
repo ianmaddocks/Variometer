@@ -1,4 +1,4 @@
-#include "flight/FlightLogStorage.h"
+#include "flight/WebUI.h"
 
 #include <LittleFS.h>
 #include <Update.h>
@@ -102,7 +102,7 @@ async function poll(){
   document.getElementById('alt').textContent=fmt(d.altitude,0)+' m';
   document.getElementById('speed').textContent=fmt(d.speedKmh,1)+' km/h';
   document.getElementById('track').textContent=fmt(d.track,0)+'°';
-  document.getElementById('batt').textContent=fmt(d.batteryPercent,0)+'% ('+fmt(d.batteryVoltage,2)+'V)';
+  document.getElementById('batt').textContent=fmt(d.batteryPercent,0)+'%';
   document.getElementById('pos').textContent=d.gpsFix?(fmt(d.lat,5)+', '+fmt(d.lon,5)+' • '+d.sats+' sats'):('no fix • '+d.sats+' sats');
   document.getElementById('recLabel').textContent=d.recording?'Recording':'Idle';
   const s=d.elapsedS||0;
@@ -119,7 +119,7 @@ setInterval(poll,500);poll();
 
 }  // namespace
 
-void FlightLogStorage::begin() {
+void WebUI::begin() {
     mounted_ = LittleFS.begin(false, "/littlefs", 10, "flights");
     if (!mounted_) {
         DBGLN("LittleFS mount failed; formatting the flight-log partition");
@@ -188,7 +188,7 @@ void FlightLogStorage::begin() {
          WiFi.softAPIP().toString().c_str());
 }
 
-void FlightLogStorage::stopNetwork() {
+void WebUI::stopNetwork() {
     if (server_ != nullptr) {
         webServer.stop();
         server_ = nullptr;
@@ -198,10 +198,10 @@ void FlightLogStorage::stopNetwork() {
     WiFi.mode(WIFI_OFF);
     dnsServer_.stop();
 
-    DBGLN("FlightLogStorage: WiFi AP stopped");
+    DBGLN("WebUI: WiFi AP stopped");
 }
 
-void FlightLogStorage::update() {
+void WebUI::update() {
     if (server_ != nullptr) {
         server_->handleClient();
         dnsServer_.processNextRequest();
@@ -212,7 +212,7 @@ void FlightLogStorage::update() {
     }
 }
 
-bool FlightLogStorage::startFlight(const GPS::DateTime& startTime) {
+bool WebUI::startFlight(const GPS::DateTime& startTime) {
     if (!mounted_ || active_ || !LittleFS.exists("/flights")) {
         return false;
     }
@@ -231,7 +231,7 @@ bool FlightLogStorage::startFlight(const GPS::DateTime& startTime) {
     return true;
 }
 
-void FlightLogStorage::appendPoint(const LogSample& point) {
+void WebUI::appendPoint(const LogSample& point) {
     if (!active_) {
         return;
     }
@@ -241,7 +241,7 @@ void FlightLogStorage::appendPoint(const LogSample& point) {
                        point.pressureHpa, point.temperatureC);
 }
 
-void FlightLogStorage::finishFlight(uint32_t durationSeconds) {
+void WebUI::finishFlight(uint32_t durationSeconds) {
     if (!active_) {
         return;
     }
@@ -260,9 +260,9 @@ void FlightLogStorage::finishFlight(uint32_t durationSeconds) {
     active_ = false;
 }
 
-bool FlightLogStorage::isActive() const { return active_; }
+bool WebUI::isActive() const { return active_; }
 
-bool FlightLogStorage::consumeSettingsChanged() {
+bool WebUI::consumeSettingsChanged() {
     if (!settingsChanged_) {
         return false;
     }
@@ -270,7 +270,7 @@ bool FlightLogStorage::consumeSettingsChanged() {
     return true;
 }
 
-bool FlightLogStorage::consumeRecordToggleRequest() {
+bool WebUI::consumeRecordToggleRequest() {
     if (!recordToggleRequested_) {
         return false;
     }
@@ -278,7 +278,7 @@ bool FlightLogStorage::consumeRecordToggleRequest() {
     return true;
 }
 
-String FlightLogStorage::makeStartName(const GPS::DateTime& startTime) const {
+String WebUI::makeStartName(const GPS::DateTime& startTime) const {
     if (!startTime.valid) {
         return "00000000-000000";
     }
@@ -289,7 +289,7 @@ String FlightLogStorage::makeStartName(const GPS::DateTime& startTime) const {
     return String(name);
 }
 
-bool FlightLogStorage::isSafeFileName(const String& name) const {
+bool WebUI::isSafeFileName(const String& name) const {
     if (name.length() == 0 || name.length() > 64 || name.indexOf("..") >= 0 ||
         name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) {
         return false;
@@ -297,15 +297,15 @@ bool FlightLogStorage::isSafeFileName(const String& name) const {
     return name.endsWith(".csv") || name.endsWith(".part");
 }
 
-void FlightLogStorage::handleVarioPage() {
+void WebUI::handleVarioPage() {
     webServer.send_P(200, "text/html", PAGE_VARIO);
 }
 
-void FlightLogStorage::handleStyle() {
+void WebUI::handleStyle() {
     webServer.send_P(200, "text/css", PAGE_STYLE);
 }
 
-void FlightLogStorage::handleStatusJson() {
+void WebUI::handleStatusJson() {
     if (flightData_ == nullptr) {
         webServer.send(503, "application/json", "{}");
         return;
@@ -330,12 +330,12 @@ void FlightLogStorage::handleStatusJson() {
     webServer.send(200, "application/json", json);
 }
 
-void FlightLogStorage::handleToggleRecording() {
+void WebUI::handleToggleRecording() {
     recordToggleRequested_ = true;
     webServer.send(200, "text/plain", "OK");
 }
 
-void FlightLogStorage::handleDownload() {
+void WebUI::handleDownload() {
     if (!mounted_) {
         webServer.send(503, "text/plain", "Flight-log storage unavailable");
         return;
@@ -359,7 +359,7 @@ void FlightLogStorage::handleDownload() {
     file.close();
 }
 
-void FlightLogStorage::handleDeleteLog() {
+void WebUI::handleDeleteLog() {
     if (!mounted_) {
         webServer.send(503, "text/plain", "Flight-log storage unavailable");
         return;
@@ -381,7 +381,7 @@ void FlightLogStorage::handleDeleteLog() {
     webServer.send(200, "text/plain", "OK");
 }
 
-void FlightLogStorage::handleFlightsPage() {
+void WebUI::handleFlightsPage() {
     String page;
     // Sized generously for a typical log count so the per-row
     // concatenation below mostly appends into existing capacity rather
@@ -432,7 +432,7 @@ void FlightLogStorage::handleFlightsPage() {
     webServer.send(200, "text/html", page);
 }
 
-void FlightLogStorage::handleSettingsPage() {
+void WebUI::handleSettingsPage() {
     String html = "<!doctype html><html><head><meta charset=\"utf-8\">"
                   "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1\">"
                   "<title>Settings</title><link rel=\"stylesheet\" href=\"/style.css\"></head><body>"
@@ -477,7 +477,7 @@ void FlightLogStorage::handleSettingsPage() {
     webServer.send(200, "text/html", html);
 }
 
-void FlightLogStorage::handleSettingsSave() {
+void WebUI::handleSettingsSave() {
     if (settings_ == nullptr) {
         webServer.send(503, "text/plain", "Settings unavailable");
         return;
@@ -503,7 +503,7 @@ void FlightLogStorage::handleSettingsSave() {
     webServer.send(303);
 }
 
-void FlightLogStorage::handleFirmwareUpload() {
+void WebUI::handleFirmwareUpload() {
     HTTPUpload& upload = webServer.upload();
     if (upload.status == UPLOAD_FILE_START) {
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {

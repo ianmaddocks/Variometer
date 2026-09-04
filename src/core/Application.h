@@ -14,7 +14,7 @@
 #include "flight/WindEstimator.h"
 #include "flight/FlightRecorder.h"
 #include "flight/FlightTrack.h"
-#include "flight/FlightLogStorage.h"
+#include "flight/WebUI.h"
 #include "display/DisplayManager.h"
 #include "telemetry/BleTelemetry.h"
 
@@ -73,7 +73,7 @@ private:
     WindEstimator windEstimator_;
     FlightRecorder flightRecorder_;
     FlightTrack flightTrack_;
-    FlightLogStorage flightLogStorage_;
+    WebUI webUI_;
     DisplayManager display_;
     BleTelemetry bleTelemetry_;
 

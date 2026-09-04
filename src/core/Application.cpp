@@ -50,7 +50,7 @@ void Application::begin() {
     batteryMonitor_.begin();
     powerManager_.begin();
     buzzer_.begin();
-    flightLogStorage_.begin();
+    webUI_.begin();
     display_.begin();
     display_.setPowerManager(&powerManager_);
     display_.setRecorder(&flightRecorder_);
@@ -77,10 +77,10 @@ void Application::begin() {
 
     // Pointers, not copies: the web Settings/Vario pages and the
     // on-device Settings screen read and edit these live, and must
-    // outlive FlightLogStorage's WebServer callbacks / DisplayManager's
+    // outlive WebUI's WebServer callbacks / DisplayManager's
     // encoder handling.
-    flightLogStorage_.setFlightData(&flightData_);
-    flightLogStorage_.setSettings(&settings_);
+    webUI_.setFlightData(&flightData_);
+    webUI_.setSettings(&settings_);
     display_.setSettings(&settings_);
 
     // BLE stack init is independent of the I2C bus and sensors above, so
@@ -218,14 +218,14 @@ void Application::loop() {
     const uint32_t loopStartUs = micros();
     const uint32_t now = millis();
 
-    flightLogStorage_.update();
+    webUI_.update();
 
     // The web Settings page and the on-device Settings screen both write
-    // straight into settings_ (see FlightLogStorage::setSettings() and
+    // straight into settings_ (see WebUI::setSettings() and
     // DisplayManager::setSettings()) and only flag that they did so,
     // rather than pushing the change to hardware/NVS themselves -- that
     // belongs here, alongside every other settings write.
-    if (flightLogStorage_.consumeSettingsChanged()) {
+    if (webUI_.consumeSettingsChanged()) {
         SettingsStore::save(settings_);
         applySettings();
         DBGLN("Settings updated via web UI");
@@ -239,7 +239,7 @@ void Application::loop() {
     // The web Vario page's start/stop button goes through the same
     // manual-recording path as an SW1 press, just requested asynchronously
     // from a web request instead of a debounced GPIO edge.
-    if (flightLogStorage_.consumeRecordToggleRequest()) {
+    if (webUI_.consumeRecordToggleRequest()) {
         toggleManualRecording();
     }
 
@@ -392,7 +392,7 @@ void Application::loop() {
         // these steps ever grew a reason to take a moment.
         DBGLN("Power-off: shutting down radios and display before sleep");
         bleTelemetry_.shutdown();
-        flightLogStorage_.stopNetwork();
+        webUI_.stopNetwork();
         display_.blankScreen();
         powerManager_.sleepNow();
     }
@@ -770,7 +770,7 @@ float Application::calculateDistanceFromLz(float latitude, float longitude) cons
 
 void Application::toggleManualRecording() {
     if (!manualRecordingActive_) {
-        if (!flightLogStorage_.startFlight(gps_.getUtcDateTime())) {
+        if (!webUI_.startFlight(gps_.getUtcDateTime())) {
             DBGLN("SW1: unable to start flight log capture");
             return;
         }
@@ -779,7 +779,7 @@ void Application::toggleManualRecording() {
         lastRawLogSampleMs_ = 0;
         DBGLN("SW1: recording started");
     } else {
-        flightLogStorage_.finishFlight((millis() - manualRecordingStartMs_) / 1000);
+        webUI_.finishFlight((millis() - manualRecordingStartMs_) / 1000);
         manualRecordingActive_ = false;
         DBGLN("SW1: recording stopped");
     }
@@ -796,7 +796,7 @@ void Application::sampleManualRecording() {
     sample.gpsFix = flightData_.gpsFix;
     sample.pressureHpa = biometricSensor_.getPressure() / 100.0f;
     sample.temperatureC = biometricSensor_.getTemperature();
-    flightLogStorage_.appendPoint(sample);
+    webUI_.appendPoint(sample);
 }
 
 void Application::updateDisplay() {
