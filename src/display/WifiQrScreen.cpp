@@ -18,6 +18,27 @@ constexpr int16_t kQrY = 14;
 constexpr size_t kVersion3LowCapacity = 53;
 constexpr size_t kQrBufferBytes = 110;
 
+/*
+ * SH1107 SETDISPLAYCLOCKDIV (0xD5) parameter byte: high nibble is
+ * oscillator frequency, low nibble is clock divide ratio minus one.
+ * Adafruit_SH1107::begin() leaves this at 0x51 (divide-by-2) for every
+ * screen. A monochrome OLED doesn't light all its rows at once -- the
+ * controller strobes them sequentially fast enough that persistence of
+ * vision reads it as one solid image -- and that row-by-row scan is
+ * exactly what a phone's rolling shutter can catch mid-cycle as banding
+ * when photographing an otherwise-static frame, like this screen's QR
+ * code. Dropping the divide ratio to 0 (divide-by-1, same oscillator
+ * frequency) doubles the scan rate, halving how much of one scan a given
+ * camera row-exposure sees -- the panel-side half of fixing that; the
+ * other half is this screen only drawing once per visit rather than
+ * re-pushing an identical frame every cycle (see needsRedraw() in the
+ * header). Scoped to this screen alone (set in draw(), restored in
+ * exit()) rather than changed globally in DisplayManager::begin(), since
+ * every other screen only needs the vendor-tuned default.
+ */
+constexpr uint8_t kFastClockDiv = 0x50;
+constexpr uint8_t kNormalClockDiv = 0x51;
+
 void appendEscapedWifiField(String& payload, const char* value) {
     for (const char* character = value; *character != '\0'; ++character) {
         if (*character == '\\' || *character == ';' || *character == ',' ||
@@ -58,6 +79,8 @@ void WifiQrScreen::draw(DisplayManager& display, const FlightData& data) {
     // this call draws (QR or an error message) is this visit's final
     // frame; mark it done up front so every return path below is covered.
     rendered_ = true;
+    lastDisplay_ = &display;
+    display.display().sendCommand(SH110X_SETDISPLAYCLOCKDIV, kFastClockDiv);
 
     String payload;
     if (!makeWifiPayload(payload)) {
@@ -90,6 +113,10 @@ void WifiQrScreen::draw(DisplayManager& display, const FlightData& data) {
     }
 }
 
-void WifiQrScreen::exit() {}
+void WifiQrScreen::exit() {
+    if (lastDisplay_ != nullptr) {
+        lastDisplay_->display().sendCommand(SH110X_SETDISPLAYCLOCKDIV, kNormalClockDiv);
+    }
+}
 
 }  // namespace variometer

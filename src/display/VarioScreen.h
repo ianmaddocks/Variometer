@@ -63,6 +63,19 @@ private:
     void drawFooter(DisplayManager& display, const FlightData& data) const;
 
     VarioBarFooterField footerField_ = VarioBarFooterField::AltAgl;
+
+    /*
+     * TEMPORARY -- for filming this screen to show UI layout bugs without
+     * rolling-shutter banding from the SH1107's row-scan rate (see
+     * WifiQrScreen.cpp for the original writeup of why this works). Unlike
+     * WifiQrScreen this screen redraws every cycle on purpose (live vario
+     * data), so only the panel-side clock-div speedup applies here, not
+     * WifiQrScreen's "draw once" trick. Remove fastClockApplied_,
+     * lastDisplay_, and their use in enter()/draw()/exit() once the video
+     * capture is done.
+     */
+    bool fastClockApplied_ = false;
+    DisplayManager* lastDisplay_ = nullptr;
 };
 
 }  // namespace variometer

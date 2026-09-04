@@ -102,6 +102,20 @@ public:
         display_.invertDisplay(invert);
     }
 
+    // Thin passthroughs to the underlying Adafruit_GrayOLED command
+    // interface, for the rare case a screen needs to poke a raw
+    // controller register (e.g. WifiQrScreen tuning the SH1107's row-scan
+    // rate). Deliberately generic -- no knowledge here of which register
+    // or why; that reasoning belongs with the screen that needs it.
+    void sendCommand(uint8_t command) {
+        display_.oled_command(command);
+    }
+
+    void sendCommand(uint8_t command, uint8_t value) {
+        uint8_t cmd[] = {command, value};
+        display_.oled_commandList(cmd, sizeof(cmd));
+    }
+
 private:
     Adafruit_SH1107 display_{128, 128, &Wire};
 };
