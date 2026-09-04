@@ -43,6 +43,7 @@ bool makeWifiPayload(String& payload) {
 }  // namespace
 
 void WifiQrScreen::enter() {
+    rendered_ = false;
     DBGLN("Entering WiFi QR screen");
 }
 
@@ -52,6 +53,11 @@ void WifiQrScreen::update(const FlightData& data) {
 
 void WifiQrScreen::draw(DisplayManager& display, const FlightData& data) {
     (void)data;
+
+    // Only ever called once per visit -- see needsRedraw() -- so whatever
+    // this call draws (QR or an error message) is this visit's final
+    // frame; mark it done up front so every return path below is covered.
+    rendered_ = true;
 
     String payload;
     if (!makeWifiPayload(payload)) {

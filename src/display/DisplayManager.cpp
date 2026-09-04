@@ -188,6 +188,19 @@ void DisplayManager::setScreen(ScreenId screen) {
     if (screen == ScreenId::WifiQr) wifiQrScreen_->enter();
 }
 
+Screen* DisplayManager::activeScreenObject() const {
+    switch (activeScreen_) {
+        case ScreenId::VarioBar:      return varioBarScreen_;
+        case ScreenId::AltitudeTrace: return altitudeTraceScreen_;
+        case ScreenId::WindDirection: return windDirectionScreen_;
+        case ScreenId::FlightMap:     return flightMapScreen_;
+        case ScreenId::Settings:      return settingsScreen_;
+        case ScreenId::Landed:        return landedScreen_;
+        case ScreenId::WifiQr:        return wifiQrScreen_;
+    }
+    return nullptr;
+}
+
 void DisplayManager::updateScreenSelection(const FlightData& data) {
     if (!initialized_) {
         return;
@@ -234,14 +247,13 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         DBGF("Screen transition -> %d\n", static_cast<int>(activeScreen_));
     }
 
-    display_.clear();
-
     if (isPoweringOff()) {
         // Shown for the ~800ms the power-off tune plays before radios
         // are stopped and the screen goes blank ahead of deep sleep --
         // see PowerManager::readyToSleep() / Application::loop(). Drawn
         // as a full-screen overlay rather than a dedicated screen so it
         // can interrupt whatever screen was active at the time.
+        display_.clear();
         display_.setCursor(0, 1);
         display_.print("Powering Off");
         display_.setCursor(0, Config::LINE_SPACING);
@@ -249,6 +261,25 @@ void DisplayManager::drawCurrentScreen(const FlightData& data) {
         display_.display();
         return;
     }
+
+    /*
+     * Most screens are driven by live flight data and need redrawing
+     * every cycle; a screen can opt out via Screen::needsRedraw() if its
+     * content is fixed once drawn (see WifiQrScreen, which exists to be
+     * held still in front of a phone camera -- redrawing it, and
+     * re-encoding its QR, every DISPLAY_UPDATE_INTERVAL_MS bought nothing
+     * and was exactly what a rolling-shutter camera catches as
+     * banding/tearing). Skipping the redraw here also skips the common
+     * status bar below, so a screen that opts out is trading a live
+     * battery/signal readout for a genuinely still image -- the right
+     * trade for a screen meant to be photographed, not read continuously.
+     */
+    Screen* activeScreenPtr = activeScreenObject();
+    if (activeScreenPtr != nullptr && !activeScreenPtr->needsRedraw()) {
+        return;
+    }
+
+    display_.clear();
 
     if (activeScreen_ == ScreenId::VarioBar && recorder_ != nullptr && recorder_->size() > 1) {
         const size_t count = recorder_->size();

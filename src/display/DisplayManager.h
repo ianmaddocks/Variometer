@@ -170,6 +170,11 @@ private:
     void drawCurrentScreen(const FlightData& data);
     void setScreen(ScreenId screen);
 
+    // Base-class view of whichever screen pointer below is active, so
+    // drawCurrentScreen() can ask the generic Screen::needsRedraw()
+    // question without knowing which concrete screen it's talking to.
+    Screen* activeScreenObject() const;
+
     ScreenId activeScreen_ = ScreenId::VarioBar;
     ScreenId lastScreen_ = ScreenId::VarioBar;
     FlightState currentFlightState_ = FlightState::PREFLIGHT;
