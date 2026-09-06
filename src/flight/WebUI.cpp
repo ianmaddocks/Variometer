@@ -194,11 +194,11 @@ bool WebUI::consumeSettingsChanged() {
     return true;
 }
 
-bool WebUI::consumeRecordToggleRequest() {
-    if (!recordToggleRequested_) {
+bool WebUI::consumeStartRecordingRequest() {
+    if (!startRecordingRequested_) {
         return false;
     }
-    recordToggleRequested_ = false;
+    startRecordingRequested_ = false;
     return true;
 }
 
@@ -256,7 +256,11 @@ void WebUI::handleStatusJson() {
 }
 
 void WebUI::handleToggleRecording() {
-    recordToggleRequested_ = true;
+    // Route name kept as "toggle_recording" (see the /toggle_recording
+    // registration in begin()) to avoid also changing the URL the web
+    // page calls; the request itself is start-only now -- see
+    // consumeStartRecordingRequest().
+    startRecordingRequested_ = true;
     webServer.send(200, "text/plain", "OK");
 }
 

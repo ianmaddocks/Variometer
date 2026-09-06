@@ -33,7 +33,8 @@ private:
     void updateDisplay();
     void initializeFlightSession();
     float calculateDistanceFromLz(float latitude, float longitude) const;
-    void toggleManualRecording();
+    void startRecording(const char* trigger);
+    void stopRecording(const char* trigger);
     void sampleManualRecording();
     void applySettings();
 
@@ -50,9 +51,12 @@ private:
     uint32_t lastTrackSampleMs_ = 0;
     uint32_t flightStartTimeMs_ = 0;
 
-    // Manual SW1-triggered raw data capture, independent of the
-    // takeoff/landing flight-state machine. See Application::loop() and
-    // Application::toggleManualRecording().
+    // Persisted flight-log (CSV) capture. Started automatically on takeoff
+    // and stopped automatically on landing (see initializeFlightSession()
+    // and the landing-edge check in updateFlightLogic()); SW1 and the web
+    // Vario page's button can also start it early (e.g. a ground test),
+    // but neither can stop an active recording -- see Application::
+    // startRecording()/stopRecording() for why manual stop was removed.
     bool manualRecordingActive_ = false;
     uint32_t manualRecordingStartMs_ = 0;
     uint32_t lastRawLogSampleMs_ = 0;

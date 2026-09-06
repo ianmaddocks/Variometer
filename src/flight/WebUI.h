@@ -61,10 +61,12 @@ public:
     // persist and re-apply settings_ in response. Consuming clears it.
     bool consumeSettingsChanged();
 
-    // True once after the web Vario page's start/stop recording button is
+    // True once after the web Vario page's Start Recording button is
     // pressed; the owner is expected to act on it (same as an SW1 press).
+    // Start-only -- there is deliberately no equivalent stop request, so
+    // an active recording can't be cut short from the web UI either.
     // Consuming clears it.
-    bool consumeRecordToggleRequest();
+    bool consumeStartRecordingRequest();
 
 private:
     void handleVarioPage();
@@ -92,7 +94,7 @@ private:
     const FlightData* flightData_ = nullptr;
     DeviceSettings* settings_ = nullptr;
     bool settingsChanged_ = false;
-    bool recordToggleRequested_ = false;
+    bool startRecordingRequested_ = false;
 };
 
 }  // namespace variometer

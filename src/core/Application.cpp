@@ -237,11 +237,11 @@ void Application::loop() {
         DBGLN("Settings updated via on-device edit mode");
     }
 
-    // The web Vario page's start/stop button goes through the same
-    // manual-recording path as an SW1 press, just requested asynchronously
-    // from a web request instead of a debounced GPIO edge.
-    if (webUI_.consumeRecordToggleRequest()) {
-        toggleManualRecording();
+    // The web Vario page's Start Recording button goes through the same
+    // start-only path as an SW1 press, just requested asynchronously from
+    // a web request instead of a debounced GPIO edge.
+    if (webUI_.consumeStartRecordingRequest()) {
+        startRecording("Web");
     }
 
     encoder_.update();
@@ -255,14 +255,18 @@ void Application::loop() {
         haptic_.triggerPulse(Config::HAPTIC_BUTTON_PULSE_MS);
     }
 
-    // SW1: dedicated start/stop for the raw data-capture log (2 Hz,
-    // GPS + barometer), independent of the takeoff/landing flight-state
-    // machine below. This is SW1's only role now -- it used to also
+    // SW1: manual early-start for the raw data-capture log (2 Hz, GPS +
+    // barometer) -- e.g. a ground test before takeoff is auto-detected.
+    // Deliberately start-only: the log is otherwise fully owned by the
+    // takeoff/landing flight-state machine below (see
+    // initializeFlightSession() / the landing-edge check in
+    // updateFlightLogic()), so there is no SW1 action that can cut a
+    // recording short. This is SW1's only role now -- it used to also
     // stand in for the encoder's double-push (power-off confirm, debug
     // mock GPS toggle); those now go through the encoder alone so a
     // single SW1 press has one unambiguous meaning.
     if (sw1Button_.wasPressed()) {
-        toggleManualRecording();
+        startRecording("SW1");
     }
 
     /*
@@ -686,6 +690,16 @@ void Application::updateFlightLogic() {
         initializeFlightSession();
         buzzer_.playTakeoffTone();
     }
+
+    // Landing edge: LANDING_DETECTED is a one-pass transient state (see
+    // FlightDetector::update(), which advances it straight to POST_FLIGHT
+    // next call), so this fires exactly once per flight, right as landing
+    // is first detected -- the automatic counterpart to the automatic
+    // start in initializeFlightSession() above.
+    if ((previousState == FlightState::FLIGHT || previousState == FlightState::TAKEOFF_DETECTED) &&
+        detectorState == FlightState::LANDING_DETECTED) {
+        stopRecording("Landing");
+    }
     flightData_.flightState = detectorState;
 
     /*
@@ -743,9 +757,11 @@ void Application::initializeFlightSession() {
     // flight vario calculation starts cleanly.
     varioCalculator_.reset();
 
-    // Note: the persistent flight-log capture is no longer tied to
-    // takeoff/landing detection here -- it is started/stopped explicitly
-    // by SW1. See Application::toggleManualRecording().
+    // Persistent flight-log (CSV) capture: start automatically on takeoff.
+    // A no-op if SW1/the web button already started it as a ground test
+    // (see startRecording()'s own guard) -- that earlier start time is
+    // kept rather than reset here.
+    startRecording("Takeoff");
 
     lastTraceSampleMs_ = millis() - Config::ALTITUDE_TRACE_SAMPLE_INTERVAL_MS;
     flightStartTimeMs_ = millis();
@@ -769,21 +785,41 @@ float Application::calculateDistanceFromLz(float latitude, float longitude) cons
                            flightData_.lzLatitude, flightData_.lzLongitude);
 }
 
-void Application::toggleManualRecording() {
-    if (!manualRecordingActive_) {
-        if (!webUI_.startFlight(gps_.getUtcDateTime())) {
-            DBGLN("SW1: unable to start flight log capture");
-            return;
-        }
-        manualRecordingActive_ = true;
-        manualRecordingStartMs_ = millis();
-        lastRawLogSampleMs_ = 0;
-        DBGLN("SW1: recording started");
-    } else {
-        webUI_.finishFlight((millis() - manualRecordingStartMs_) / 1000);
-        manualRecordingActive_ = false;
-        DBGLN("SW1: recording stopped");
+/*
+ * Starts the persisted CSV flight log, if it isn't already running.
+ *
+ * `trigger` is only for the debug log line (which caller -- SW1, the web
+ * button, or automatic takeoff detection -- asked for this), so a
+ * recording already started by one of the others is never silently
+ * restarted (and its start time reset) by another.
+ */
+void Application::startRecording(const char* trigger) {
+    if (manualRecordingActive_) {
+        return;
     }
+    if (!webUI_.startFlight(gps_.getUtcDateTime())) {
+        DBGF("%s: unable to start flight log capture\n", trigger);
+        return;
+    }
+    manualRecordingActive_ = true;
+    manualRecordingStartMs_ = millis();
+    lastRawLogSampleMs_ = 0;
+    DBGF("%s: recording started\n", trigger);
+}
+
+/*
+ * Stops the persisted CSV flight log. Only called automatically on
+ * landing detection (see updateFlightLogic()) -- there is deliberately no
+ * manual trigger for this any more, so an accidental SW1/web-button press
+ * mid-flight can no longer cut a recording short.
+ */
+void Application::stopRecording(const char* trigger) {
+    if (!manualRecordingActive_) {
+        return;
+    }
+    webUI_.finishFlight((millis() - manualRecordingStartMs_) / 1000);
+    manualRecordingActive_ = false;
+    DBGF("%s: recording stopped\n", trigger);
 }
 
 void Application::sampleManualRecording() {

@@ -19,7 +19,7 @@
 </div>
 <div class="card">
 <div class="stat"><div class="label" id="recLabel">Idle</div><div class="value" id="recTime">00:00</div></div>
-<button id="recBtn" onclick="toggleRec()">Start Recording</button>
+<button id="recBtn" onclick="startRec()">Start Recording</button>
 </div>
 <div class="card">
 <div class="stat"><div class="label">Audio Vario</div><div class="value" id="soundStatus">Off</div></div>
@@ -58,12 +58,16 @@ async function poll(){
   document.getElementById('recLabel').textContent=d.recording?'Recording':'Idle';
   const s=d.elapsedS||0;
   document.getElementById('recTime').textContent=pad(Math.floor(s/60))+':'+pad(s%60);
+  // Start-only: once recording, the button is disabled rather than
+  // turned into a Stop control -- recording now stops automatically on
+  // landing, and there is deliberately no way to cut it short by
+  // mis-tapping this button mid-flight.
   const btn=document.getElementById('recBtn');
-  btn.textContent=d.recording?'Stop Recording':'Start Recording';
-  btn.className=d.recording?'stop':'';
+  btn.textContent=d.recording?'Recording…':'Start Recording';
+  btn.disabled=d.recording;
  }catch(e){}
 }
-function toggleRec(){fetch('/toggle_recording',{method:'POST'}).then(poll);}
+function startRec(){fetch('/toggle_recording',{method:'POST'}).then(poll);}
 
 // --- Audio vario ---
 // Climb: pitched beeps, faster & higher with stronger lift.
