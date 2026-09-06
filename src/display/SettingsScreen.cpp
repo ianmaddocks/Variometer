@@ -36,7 +36,7 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     }
 #endif
 
-    int line = 3;
+    int line = 2;
     display.display().setCursor(0, 1);
     display.display().print("Settings");
     display.display().setCursor(0, line++ * Config::LINE_SPACING);

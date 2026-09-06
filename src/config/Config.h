@@ -341,7 +341,7 @@ constexpr float VARIO_CALC_MAX = 20.0f;
  * The device name is what the phone sees when scanning; it does not need
  * to match anything app-specific unless FlyGaggle filters by name.
  */
-constexpr char BLE_DEVICE_NAME[] = "Variometer";
+constexpr char BLE_DEVICE_NAME[] = "Ian Variometer";
 
 // GPS-derived sentences (GGA/RMC) at a conventional 1 Hz.
 constexpr uint32_t BLE_GPS_SENTENCE_INTERVAL_MS = 1000;

@@ -21,101 +21,18 @@ String htmlEscape(const String& value) {
     return result;
 }
 
-const char PAGE_STYLE[] PROGMEM = R"rawliteral(
-:root{--bg:#0b0d10;--fg:#e8e8e8;--accent:#3ddc84;--sink:#ff5252;--muted:#8a8f98;--card:#171a1f;}
-*{box-sizing:border-box;}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
-body{padding-bottom:64px;}
-.page{max-width:480px;margin:0 auto;padding:16px;}
-h1{font-size:1.1rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:0 0 12px;}
-.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px;}
-.big{font-size:3.2rem;font-weight:700;text-align:center;margin:8px 0;}
-.climb{color:var(--accent);}
-.sink{color:var(--sink);}
-.avg{text-align:center;color:var(--muted);font-size:.95rem;margin-top:-4px;}
-.bar-wrap{height:180px;width:56px;background:#20242b;border-radius:10px;margin:12px auto;position:relative;overflow:hidden;}
-.bar{position:absolute;left:0;right:0;bottom:50%;background:var(--accent);}
-.bar.sink{background:var(--sink);top:50%;bottom:auto;}
-.center-line{position:absolute;left:0;right:0;top:50%;height:2px;background:#444;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.stat .label{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;}
-.stat .value{font-size:1.4rem;font-weight:600;}
-button,input[type=submit]{background:var(--accent);color:#04150a;border:none;border-radius:10px;padding:12px 16px;font-size:1rem;font-weight:600;width:100%;}
-button.stop{background:var(--sink);color:#2a0000;}
-label{display:block;color:var(--muted);font-size:.8rem;margin:12px 0 4px;}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;}
-.toggle-row span{font-size:1rem;}
-input[type=checkbox]{width:22px;height:22px;}
-input[type=text],input[type=number],input[type=file]{width:100%;padding:10px;border-radius:8px;border:1px solid #2a2f37;background:#0f1216;color:var(--fg);font-size:1rem;}
-.filelist{list-style:none;padding:0;margin:0;}
-.filelist li{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #23262c;}
-.filelist a{color:var(--fg);text-decoration:none;word-break:break-all;}
-.filelist .size{color:var(--muted);font-size:.8rem;margin-left:8px;white-space:nowrap;}
-.rm{background:var(--sink);color:#2a0000;border:none;border-radius:6px;padding:6px 10px;font-size:.8rem;width:auto;}
-.hint{color:var(--muted);font-size:.8rem;margin-top:6px;}
-nav.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:#14161a;border-top:1px solid #23262c;}
-nav.tabs a{flex:1;text-align:center;padding:12px 0;color:var(--muted);text-decoration:none;font-size:.85rem;}
-nav.tabs a.active{color:var(--accent);font-weight:600;}
-)rawliteral";
-
-const char PAGE_VARIO[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Variometer</title><link rel="stylesheet" href="/style.css"></head><body>
-<div class="page">
-<h1>Vario</h1>
-<div class="card">
-<div class="big" id="vs">--</div>
-<div class="avg" id="avg">avg --</div>
-<div class="bar-wrap"><div class="center-line"></div><div class="bar" id="bar"></div></div>
-</div>
-<div class="card grid">
-<div class="stat"><div class="label">Alt AGL</div><div class="value" id="alt">--</div></div>
-<div class="stat"><div class="label">GPS Speed</div><div class="value" id="speed">--</div></div>
-<div class="stat"><div class="label">Track</div><div class="value" id="track">--</div></div>
-<div class="stat"><div class="label">Battery</div><div class="value" id="batt">--</div></div>
-</div>
-<div class="card">
-<div class="stat"><div class="label">GPS</div><div class="value" id="pos" style="font-size:.95rem;">--</div></div>
-</div>
-<div class="card">
-<div class="stat"><div class="label" id="recLabel">Idle</div><div class="value" id="recTime">00:00</div></div>
-<button id="recBtn" onclick="toggleRec()">Start Recording</button>
-</div>
-</div>
-<nav class="tabs"><a href="/" class="active">Vario</a><a href="/flights">Flights</a><a href="/settings">Settings</a></nav>
-<script>
-function fmt(n,d){return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);}
-function pad(n){return n<10?'0'+n:n;}
-async function poll(){
- try{
-  const r=await fetch('/status');const d=await r.json();
-  const vs=d.vsMps;
-  const vsEl=document.getElementById('vs');
-  vsEl.textContent=(vs>=0?'+':'')+fmt(vs,1)+' m/s';
-  vsEl.className='big '+(vs>=0?'climb':'sink');
-  document.getElementById('avg').textContent='avg '+(d.vsAvgMps>=0?'+':'')+fmt(d.vsAvgMps,1)+' m/s';
-  const bar=document.getElementById('bar');
-  const pct=Math.max(-100,Math.min(100,vs/5*100));
-  if(pct>=0){bar.className='bar';bar.style.height=Math.abs(pct)+'%';}
-  else{bar.className='bar sink';bar.style.height=Math.abs(pct)+'%';}
-  document.getElementById('alt').textContent=fmt(d.altitude,0)+' m';
-  document.getElementById('speed').textContent=fmt(d.speedKmh,1)+' km/h';
-  document.getElementById('track').textContent=fmt(d.track,0)+'°';
-  document.getElementById('batt').textContent=fmt(d.batteryPercent,0)+'%';
-  document.getElementById('pos').textContent=d.gpsFix?(fmt(d.lat,5)+', '+fmt(d.lon,5)+' • '+d.sats+' sats'):('no fix • '+d.sats+' sats');
-  document.getElementById('recLabel').textContent=d.recording?'Recording':'Idle';
-  const s=d.elapsedS||0;
-  document.getElementById('recTime').textContent=pad(Math.floor(s/60))+':'+pad(s%60);
-  const btn=document.getElementById('recBtn');
-  btn.textContent=d.recording?'Stop Recording':'Start Recording';
-  btn.className=d.recording?'stop':'';
- }catch(e){}
-}
-function toggleRec(){fetch('/toggle_recording',{method:'POST'}).then(poll);}
-setInterval(poll,500);poll();
-</script></body></html>
-)rawliteral";
+/*
+ * Symbols for the embedded static pages (see board_build.embed_txtfiles
+ * in platformio.ini) -- linked in directly from src/web/style.css and
+ * src/web/vario.html, not read from a filesystem at runtime. The
+ * asm() name is the linker section PlatformIO's embed step generates:
+ * "_binary_" + the path as given to embed_txtfiles with every non-
+ * alphanumeric character replaced by "_", + "_start"/"_end". Content is
+ * NUL-terminated, so the single-argument send_P() overload (which uses
+ * strlen_P()) works the same way the old inline PROGMEM strings did.
+ */
+extern const uint8_t style_css_start[] asm("_binary_src_web_style_css_start");
+extern const uint8_t vario_html_start[] asm("_binary_src_web_vario_html_start");
 
 }  // namespace
 
@@ -298,11 +215,11 @@ bool WebUI::isSafeFileName(const String& name) const {
 }
 
 void WebUI::handleVarioPage() {
-    webServer.send_P(200, "text/html", PAGE_VARIO);
+    webServer.send_P(200, "text/html", (PGM_P)vario_html_start);
 }
 
 void WebUI::handleStyle() {
-    webServer.send_P(200, "text/css", PAGE_STYLE);
+    webServer.send_P(200, "text/css", (PGM_P)style_css_start);
 }
 
 void WebUI::handleStatusJson() {

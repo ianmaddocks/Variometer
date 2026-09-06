@@ -1,0 +1,130 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Variometer</title><link rel="stylesheet" href="style.css"></head><body>
+<div class="page">
+<h1>Vario</h1>
+<div class="card">
+<div class="big" id="vs">--</div>
+<div class="avg" id="avg">avg --</div>
+<div class="bar-wrap"><div class="center-line"></div><div class="bar" id="bar"></div></div>
+</div>
+<div class="card grid">
+<div class="stat"><div class="label">Alt AGL</div><div class="value" id="alt">--</div></div>
+<div class="stat"><div class="label">GPS Speed</div><div class="value" id="speed">--</div></div>
+<div class="stat"><div class="label">Track</div><div class="value" id="track">--</div></div>
+<div class="stat"><div class="label">Battery</div><div class="value" id="batt">--</div></div>
+</div>
+<div class="card">
+<div class="stat"><div class="label">GPS</div><div class="value" id="pos" style="font-size:.95rem;">--</div></div>
+</div>
+<div class="card">
+<div class="stat"><div class="label" id="recLabel">Idle</div><div class="value" id="recTime">00:00</div></div>
+<button id="recBtn" onclick="toggleRec()">Start Recording</button>
+</div>
+<div class="card">
+<div class="stat"><div class="label">Audio Vario</div><div class="value" id="soundStatus">Off</div></div>
+<button id="soundBtn" onclick="toggleSound()">Enable Sound</button>
+</div>
+</div>
+<nav class="tabs"><a href="/" class="active">Vario</a><a href="/flights">Flights</a><a href="/settings">Settings</a></nav>
+<script>
+function fmt(n,d){return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);}
+function pad(n){return n<10?'0'+n:n;}
+let lastVs=0;
+async function poll(){
+ try{
+  const r=await fetch('/status');const d=await r.json();
+  const vs=d.vsMps;
+  lastVs=vs;
+  const vsEl=document.getElementById('vs');
+  vsEl.textContent=(vs>=0?'+':'')+fmt(vs,1)+' m/s';
+  vsEl.className='big '+(vs>=0?'climb':'sink');
+  document.getElementById('avg').textContent='avg '+(d.vsAvgMps>=0?'+':'')+fmt(d.vsAvgMps,1)+' m/s';
+  const bar=document.getElementById('bar');
+  const pct=Math.max(-100,Math.min(100,vs/5*100));
+  if(pct>=0){bar.className='bar';bar.style.height=Math.abs(pct)+'%';}
+  else{bar.className='bar sink';bar.style.height=Math.abs(pct)+'%';}
+  document.getElementById('alt').textContent=fmt(d.altitude,0)+' m';
+  document.getElementById('speed').textContent=fmt(d.speedKmh,1)+' km/h';
+  document.getElementById('track').textContent=fmt(d.track,0)+'°';
+  document.getElementById('batt').textContent=fmt(d.batteryPercent,0)+'%';
+  document.getElementById('pos').textContent=d.gpsFix?(fmt(d.lat,5)+', '+fmt(d.lon,5)+' • '+d.sats+' sats'):('no fix • '+d.sats+' sats');
+  document.getElementById('recLabel').textContent=d.recording?'Recording':'Idle';
+  const s=d.elapsedS||0;
+  document.getElementById('recTime').textContent=pad(Math.floor(s/60))+':'+pad(s%60);
+  const btn=document.getElementById('recBtn');
+  btn.textContent=d.recording?'Stop Recording':'Start Recording';
+  btn.className=d.recording?'stop':'';
+ }catch(e){}
+}
+function toggleRec(){fetch('/toggle_recording',{method:'POST'}).then(poll);}
+
+// --- Audio vario ---
+// Climb: pitched beeps, faster & higher with stronger lift.
+// Strong sink: continuous low siren. Deadband and mild sink: silent.
+const CLIMB_DEADBAND=0.15;   // m/s, below this = silent
+const SINK_ALARM=2.0;        // m/s (as positive magnitude), sink stronger than this = siren
+let audioCtx=null,osc=null,gainNode=null,soundOn=false;
+let wakeLock=null;
+
+async function acquireWakeLock(){
+ if(!('wakeLock' in navigator)) return;
+ try{
+  wakeLock=await navigator.wakeLock.request('screen');
+  wakeLock.addEventListener('release',()=>{wakeLock=null;});
+ }catch(e){ /* not available (e.g. non-HTTPS context) or denied */ }
+}
+function releaseWakeLock(){
+ if(wakeLock){wakeLock.release();wakeLock=null;}
+}
+document.addEventListener('visibilitychange',()=>{
+ if(soundOn && document.visibilityState==='visible') acquireWakeLock();
+});
+
+function initAudio(){
+ if(audioCtx) return;
+ audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+ osc=audioCtx.createOscillator();
+ osc.type='sine';
+ gainNode=audioCtx.createGain();
+ gainNode.gain.value=0;
+ osc.connect(gainNode).connect(audioCtx.destination);
+ osc.start();
+}
+
+function toggleSound(){
+ soundOn=!soundOn;
+ if(soundOn){
+  initAudio();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  acquireWakeLock();
+ }else{
+  if(gainNode) gainNode.gain.setTargetAtTime(0,audioCtx.currentTime,0.02);
+  releaseWakeLock();
+ }
+ document.getElementById('soundStatus').textContent=soundOn?'On':'Off';
+ document.getElementById('soundBtn').textContent=soundOn?'Disable Sound':'Enable Sound';
+}
+
+function audioTick(){
+ if(!soundOn||!audioCtx) return;
+ const vs=lastVs;
+ const now=audioCtx.currentTime;
+ if(vs>CLIMB_DEADBAND){
+  const freq=Math.min(1600,500+vs*150);
+  const period=Math.max(0.15,Math.min(1.2,1/(vs*1.5+0.6)));
+  const on=(now%period)<period*0.5;
+  osc.frequency.setValueAtTime(freq,now);
+  gainNode.gain.setTargetAtTime(on?0.15:0,now,0.01);
+ }else if(vs<-SINK_ALARM){
+  const freq=Math.max(150,300-(-vs-SINK_ALARM)*40);
+  osc.frequency.setValueAtTime(freq,now);
+  gainNode.gain.setTargetAtTime(0.15,now,0.05);
+ }else{
+  gainNode.gain.setTargetAtTime(0,now,0.05);
+ }
+}
+setInterval(audioTick,50);
+
+setInterval(poll,500);poll();
+</script></body></html>
