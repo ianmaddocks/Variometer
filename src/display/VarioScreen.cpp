@@ -6,6 +6,7 @@
 
 #include "config/Config.h"
 #include "display/DisplayManager.h"
+#include "utils/Units.h"
 
 namespace variometer {
 namespace {
@@ -174,11 +175,11 @@ void formatSigned(char* buf, size_t n, float v) {
     snprintf(buf, n, "%+.1f", static_cast<double>(v));
 }
 
-const char* footerFieldLabel(VarioBarFooterField f) {
+const char* footerFieldLabel(VarioBarFooterField f, bool imperial) {
     switch (f) {
         case VarioBarFooterField::GlideRatio:  return "L/D";
-        case VarioBarFooterField::GroundSpeed: return "GS km/h";
-        case VarioBarFooterField::AltAgl:      return "AGL m";
+        case VarioBarFooterField::GroundSpeed: return imperial ? "GS mph" : "GS km/h";
+        case VarioBarFooterField::AltAgl:      return imperial ? "AGL ft" : "AGL m";
         case VarioBarFooterField::FlightTime:  return "TIME min";
         case VarioBarFooterField::Count:       break;  // sentinel, unreachable
     }
@@ -198,10 +199,12 @@ void formatFooterField(char* buf, size_t n, VarioBarFooterField f,
             snprintf(buf, n, "--");
             break;
         case VarioBarFooterField::GroundSpeed:
-            snprintf(buf, n, "%d", static_cast<int>(lroundf(data.groundSpeed * 3.6f)));
+            snprintf(buf, n, "%d", static_cast<int>(lroundf(
+                units::speedForDisplay(data.groundSpeed * 3.6f, data.unitsImperial))));
             break;
         case VarioBarFooterField::AltAgl:
-            snprintf(buf, n, "%d", static_cast<int>(lroundf(data.relativeAltitude)));
+            snprintf(buf, n, "%d", static_cast<int>(lroundf(
+                units::altitudeForDisplay(data.relativeAltitude, data.unitsImperial))));
             break;
         case VarioBarFooterField::FlightTime: {
             // Minutes only, not H:MM -- at this footer slot's size-3 font
@@ -292,18 +295,24 @@ void VarioBarScreen::drawBar(DisplayManager& display, const FlightData& data) co
  */
 void VarioBarScreen::drawNumeric(DisplayManager& display, const FlightData& data) const {
     char buf[12];
+    // clampToScale/applyDeadBand operate on the raw m/s scale (matched to
+    // VARIO_BAR_SCALE_MS/VARIO_BAR_DEAD_BAND_MS), so unit conversion is
+    // applied last, only to what's actually printed.
     const float climb = applyDeadBand(data.verticalSpeed);
 
-    formatSigned(buf, sizeof(buf), clampToScale(climb)); //clamp to +/-5.0
+    formatSigned(buf, sizeof(buf),
+                units::metersPerSecondForDisplay(clampToScale(climb), data.unitsImperial));
     drawRight(display, kBigRight, kBigBaseline, kBigFigureSize, buf, SH110X_WHITE);
 
     display.display().setTextColor(SH110X_WHITE);
     display.display().setTextSize(kSmlLabelSize);
     display.display().setCursor(kAvgLabelX, baselineToTopLeft(kAvgBaseline, kSmlLabelSize));
     display.display().print("AVG");
-    drawRight(display, kBigRight, kAvgBaseline, kLrgLabelSize, "m/s", SH110X_WHITE);
+    drawRight(display, kBigRight, kAvgBaseline, kLrgLabelSize,
+             units::metersPerSecondUnitLabel(data.unitsImperial), SH110X_WHITE);
 
-    formatSigned(buf, sizeof(buf), applyDeadBand(data.verticalSpeedAverage30s));
+    formatSigned(buf, sizeof(buf),
+                units::metersPerSecondForDisplay(applyDeadBand(data.verticalSpeedAverage30s), data.unitsImperial));
     display.display().setTextSize(kSmlLabelSize);
     display.display().setTextColor(SH110X_WHITE);
     display.display().setCursor(kAvgValueX, baselineToTopLeft(kAvgBaseline, kSmlLabelSize));
@@ -318,11 +327,12 @@ void VarioBarScreen::drawFooter(DisplayManager& display, const FlightData& data)
     display.display().setTextColor(SH110X_WHITE);
     display.display().setTextSize(kSmlLabelSize);
     display.display().setCursor(kFootLeftX, baselineToTopLeft(kFootLabelY, kSmlLabelSize));
-    display.display().print("ALT m");
+    display.display().print(data.unitsImperial ? "ALT ft" : "ALT m");
     display.display().setCursor(kFootRightX, baselineToTopLeft(kFootLabelY, kSmlLabelSize));
-    display.display().print(footerFieldLabel(footerField_));
+    display.display().print(footerFieldLabel(footerField_, data.unitsImperial));
 
-    snprintf(buf, sizeof(buf), "%d", static_cast<int>(lroundf(data.barometricAltitude)));
+    snprintf(buf, sizeof(buf), "%d", static_cast<int>(lroundf(
+        units::altitudeForDisplay(data.barometricAltitude, data.unitsImperial))));
     drawRight(display, kFootLeftValueRight, kFootValueY, footerValueSize(buf), buf, SH110X_WHITE);
 
     formatFooterField(buf, sizeof(buf), footerField_, data);

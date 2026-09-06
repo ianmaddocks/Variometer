@@ -6,6 +6,7 @@
 #include "display/DisplayHelpers.h"
 #include "display/DisplayManager.h"
 #include "flight/FlightTrack.h"
+#include "utils/Units.h"
 
 namespace variometer {
 namespace {
@@ -565,8 +566,6 @@ void FlightMapScreen::drawScaleBar(DisplayManager& display,
 
 void FlightMapScreen::drawThreeD(DisplayManager& display,
                                  const FlightData& data) {
-    (void)data;
-
     const size_t count = track_->size();
 
     /*
@@ -711,8 +710,10 @@ void FlightMapScreen::drawThreeD(DisplayManager& display,
     display.display().setCursor(kPlotX + 2, kPlotBottom - 6);
     display.display().print(label);
 
-    snprintf(label, sizeof(label), "+%dm",
-             static_cast<int>(head.altitudeM - track_->minAltitude()));
+    snprintf(label, sizeof(label), "+%d%s",
+             static_cast<int>(units::altitudeForDisplay(
+                 static_cast<float>(head.altitudeM - track_->minAltitude()), data.unitsImperial)),
+             units::altitudeUnitLabel(data.unitsImperial));
     display.display().setCursor(kPlotRight - 30, kPlotY + 2);
     display.display().print(label);
 }

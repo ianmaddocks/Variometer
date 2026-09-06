@@ -141,6 +141,7 @@ public:
         SettingsFieldHapticVario,
         SettingsFieldReplaySpeed,
         SettingsFieldBackgroundWhite,
+        SettingsFieldUnits,
         SettingsFieldCount
     };
 

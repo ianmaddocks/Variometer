@@ -19,16 +19,18 @@ namespace variometer {
  * the general "BLE vario accessory" convention (NUS + GGA/RMC/LK8EX1),
  * not a confirmed FlyGaggle specification. If FlyGaggle does not
  * recognise the device, that is the first thing to check against its
- * own pairing documentation.
+ * own pairing documentation. LXWP0 (see sendLxwp0Sentence) is sent
+ * alongside LK8EX1 for the same reason, targeting Wingman's documented
+ * "XCTracer devices" support -- also unconfirmed pending a real test.
  *
  * Design choices:
  *   - Sentences are only sent while something is actually connected and
  *     subscribed to notifications -- building and transmitting NMEA to
  *     nobody would be pure waste on a battery-powered device.
- *   - GPS position (GGA/RMC) and the vario reading (LK8EX1) are sent on
- *     independent timers, because a client app wants position updates
- *     at ordinary GPS rates but a vario needle/tone reads as laggy below
- *     a few Hz -- see Config::BLE_VARIO_SENTENCE_INTERVAL_MS.
+ *   - GPS position (GGA/RMC) and the vario readings (LK8EX1, LXWP0) are
+ *     sent on independent timers, because a client app wants position
+ *     updates at ordinary GPS rates but a vario needle/tone reads as
+ *     laggy below a few Hz -- see Config::BLE_VARIO_SENTENCE_INTERVAL_MS.
  *   - The RX characteristic (phone -> device) required by the NUS
  *     profile is created but never read; nothing in this device accepts
  *     remote input. It exists purely so BLE central apps that assume a
@@ -59,6 +61,14 @@ private:
     void sendGpsSentences(const FlightData& data, const GPS::DateTime& utc);
     void sendVarioSentence(const FlightData& data, bool baroValid,
                            float pressurePa, float temperatureC);
+
+    // $LXWP0: the sentence an XC Tracer emits in its LXWP0 output mode,
+    // and the one the Wingman app's Help/FAQ documents as what it
+    // recognises from "XCTracer devices" -- sent alongside LK8EX1 (not
+    // instead of it) since which sentence a given client app actually
+    // looks for is unconfirmed without a real device test. See the
+    // class-level comment for the broader caveat this shares.
+    void sendLxwp0Sentence(const FlightData& data, bool baroValid);
 
     /*
      * Sends data as one or more BLE notifications, each no larger than

@@ -4,6 +4,7 @@
 
 #include "display/DisplayManager.h"
 #include "flight/FlightRecorder.h"
+#include "utils/Units.h"
 
 namespace variometer {
 namespace {
@@ -181,8 +182,10 @@ void AltitudeTraceScreen::draw(DisplayManager& display, const FlightData& data) 
     // Label each reference line with its altitude value so the scale is readable.
     char minLabel[16];
     char maxLabel[16];
-    snprintf(minLabel, sizeof(minLabel), "%.0fm", minAlt);
-    snprintf(maxLabel, sizeof(maxLabel), "%.0fm", maxAlt);
+    snprintf(minLabel, sizeof(minLabel), "%.0f%s",
+             units::altitudeForDisplay(minAlt, data.unitsImperial), units::altitudeUnitLabel(data.unitsImperial));
+    snprintf(maxLabel, sizeof(maxLabel), "%.0f%s",
+             units::altitudeForDisplay(maxAlt, data.unitsImperial), units::altitudeUnitLabel(data.unitsImperial));
     display.display().fillRect(47, minY - 6, strlen(maxLabel)*7.5, 13, SH110X_WHITE);
     display.display().fillRect(47, maxY - 6, strlen(minLabel)*7.5, 13, SH110X_WHITE);
     display.display().setTextColor(SH110X_BLACK);

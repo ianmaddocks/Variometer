@@ -5,6 +5,7 @@
 
 #include "display/DisplayHelpers.h"
 #include "display/DisplayManager.h"
+#include "utils/Units.h"
 
 namespace variometer {
 namespace {
@@ -376,7 +377,9 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
 
     if (haveWind) {
         const float windScreenBearing = relativeBearing(data.windDirection, data.track);
-        drawWindArrow(display, windScreenBearing, data.windSpeed, data.windConfidence);
+        drawWindArrow(display, windScreenBearing,
+                     units::metersPerSecondForDisplay(data.windSpeed, data.unitsImperial),
+                     data.windConfidence);
     } else {
         // Explicitly state the estimate is unavailable rather than
         // leaving an empty circle that could read as "calm".
@@ -390,20 +393,20 @@ void WindDirectionScreen::draw(DisplayManager& display, const FlightData& data) 
      * label that vanishes at certain bearings is worse than one placed
      * consistently outside.
      */
-    drawCentredText(display, kCircleCX, kCircleCY + kCircleR + 12, "m/s",
-                    SH110X_WHITE);
+    drawCentredText(display, kCircleCX, kCircleCY + kCircleR + 12,
+                    units::metersPerSecondUnitLabel(data.unitsImperial), SH110X_WHITE);
 
     drawVarioGauge(display, data.verticalSpeed);
 
     // Numeric climb/sink beside the gauge.
     char varioText[8];
     snprintf(varioText, sizeof(varioText), "%+.1f",
-             static_cast<double>(data.verticalSpeed));
+             static_cast<double>(units::metersPerSecondForDisplay(data.verticalSpeed, data.unitsImperial)));
 
     drawCentredText(display, kVarioTextX + 12, kVarioCY - 5, varioText,
                     SH110X_WHITE);
-    drawCentredText(display, kVarioTextX + 12, kVarioCY + 5, "m/s",
-                    SH110X_WHITE);
+    drawCentredText(display, kVarioTextX + 12, kVarioCY + 5,
+                    units::metersPerSecondUnitLabel(data.unitsImperial), SH110X_WHITE);
 }
 
 void WindDirectionScreen::exit() {}

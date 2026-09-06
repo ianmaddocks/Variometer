@@ -30,22 +30,28 @@
 <script>
 function fmt(n,d){return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);}
 function pad(n){return n<10?'0'+n:n;}
+const MS_TO_FTPS=3.280839895,M_TO_FT=3.280839895,KMH_TO_MPH=0.621371192;
 let lastVs=0;
 async function poll(){
  try{
   const r=await fetch('/status');const d=await r.json();
-  const vs=d.vsMps;
-  lastVs=vs;
+  const imperial=!!d.unitsImperial;
+  const vsUnit=imperial?'ft/s':'m/s';
+  const vs=imperial?d.vsMps*MS_TO_FTPS:d.vsMps;
+  const vsAvg=imperial?d.vsAvgMps*MS_TO_FTPS:d.vsAvgMps;
+  const alt=imperial?d.altitude*M_TO_FT:d.altitude;
+  const speed=imperial?d.speedKmh*KMH_TO_MPH:d.speedKmh;
+  lastVs=d.vsMps;
   const vsEl=document.getElementById('vs');
-  vsEl.textContent=(vs>=0?'+':'')+fmt(vs,1)+' m/s';
+  vsEl.textContent=(vs>=0?'+':'')+fmt(vs,1)+' '+vsUnit;
   vsEl.className='big '+(vs>=0?'climb':'sink');
-  document.getElementById('avg').textContent='avg '+(d.vsAvgMps>=0?'+':'')+fmt(d.vsAvgMps,1)+' m/s';
+  document.getElementById('avg').textContent='avg '+(vsAvg>=0?'+':'')+fmt(vsAvg,1)+' '+vsUnit;
   const bar=document.getElementById('bar');
-  const pct=Math.max(-100,Math.min(100,vs/5*100));
+  const pct=Math.max(-100,Math.min(100,d.vsMps/5*100));
   if(pct>=0){bar.className='bar';bar.style.height=Math.abs(pct)+'%';}
   else{bar.className='bar sink';bar.style.height=Math.abs(pct)+'%';}
-  document.getElementById('alt').textContent=fmt(d.altitude,0)+' m';
-  document.getElementById('speed').textContent=fmt(d.speedKmh,1)+' km/h';
+  document.getElementById('alt').textContent=fmt(alt,0)+' '+(imperial?'ft':'m');
+  document.getElementById('speed').textContent=fmt(speed,1)+' '+(imperial?'mph':'km/h');
   document.getElementById('track').textContent=fmt(d.track,0)+'°';
   document.getElementById('batt').textContent=fmt(d.batteryPercent,0)+'%';
   document.getElementById('pos').textContent=d.gpsFix?(fmt(d.lat,5)+', '+fmt(d.lon,5)+' • '+d.sats+' sats'):('no fix • '+d.sats+' sats');

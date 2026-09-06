@@ -21,12 +21,13 @@ void load(DeviceSettings& settings) {
     settings.replaySpeed = static_cast<uint8_t>(prefs.getUChar("replay", settings.replaySpeed));
     settings.minSatellites = static_cast<uint8_t>(prefs.getUChar("minsat", settings.minSatellites));
     settings.backgroundWhite = prefs.getBool("invert", settings.backgroundWhite);
+    settings.unitsImperial = prefs.getBool("units", settings.unitsImperial);
     prefs.end();
 
-    DBGF("SettingsStore: loaded audio=%d haptic=%d replay=%u minsat=%u invert=%d\n",
+    DBGF("SettingsStore: loaded audio=%d haptic=%d replay=%u minsat=%u invert=%d units=%s\n",
          settings.audioVarioEnabled, settings.hapticVarioEnabled,
          static_cast<unsigned>(settings.replaySpeed), static_cast<unsigned>(settings.minSatellites),
-         settings.backgroundWhite);
+         settings.backgroundWhite, settings.unitsImperial ? "imperial" : "metric");
 }
 
 void save(const DeviceSettings& settings) {
@@ -40,6 +41,7 @@ void save(const DeviceSettings& settings) {
     prefs.putUChar("replay", settings.replaySpeed);
     prefs.putUChar("minsat", settings.minSatellites);
     prefs.putBool("invert", settings.backgroundWhite);
+    prefs.putBool("units", settings.unitsImperial);
     prefs.end();
 
     DBGLN("SettingsStore: saved");

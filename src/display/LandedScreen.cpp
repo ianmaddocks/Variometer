@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "display/DisplayManager.h"
+#include "utils/Units.h"
 
 namespace variometer {
 
@@ -29,12 +30,12 @@ void LandedScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print("km");
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Alt:");
-    display.display().print(data.barometricAltitude, 1);
-    display.display().print("m");
+    display.display().print(units::altitudeForDisplay(data.barometricAltitude, data.unitsImperial), 1);
+    display.display().print(units::altitudeUnitLabel(data.unitsImperial));
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Vario:");
-    display.display().print(data.verticalSpeed, 2);
-    display.display().print("m/s");
+    display.display().print(units::metersPerSecondForDisplay(data.verticalSpeed, data.unitsImperial), 2);
+    display.display().print(units::metersPerSecondUnitLabel(data.unitsImperial));
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Sats:");
     display.display().print(static_cast<int>(data.satellites));

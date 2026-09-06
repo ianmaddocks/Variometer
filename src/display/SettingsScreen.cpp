@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "display/DisplayManager.h"
+#include "utils/Units.h"
 
 namespace variometer {
 namespace {
@@ -50,13 +51,14 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print(" Lon:");
     display.display().print(data.longitude, 3);
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
-    display.display().print(data.groundSpeed * 3.6f, 1);
-    display.display().print("km/h ");
-    display.display().print(data.barometricAltitude, 1);
-    display.display().print("m");
+    display.display().print(units::speedForDisplay(data.groundSpeed * 3.6f, data.unitsImperial), 1);
+    display.display().print(units::speedUnitLabel(data.unitsImperial));
+    display.display().print(" ");
+    display.display().print(units::altitudeForDisplay(data.barometricAltitude, data.unitsImperial), 1);
+    display.display().print(units::altitudeUnitLabel(data.unitsImperial));
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Vario:");
-    display.display().print(data.verticalSpeed, 2);
+    display.display().print(units::metersPerSecondForDisplay(data.verticalSpeed, data.unitsImperial), 2);
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Batt:");
     display.display().print(static_cast<int>(data.batteryPercent));
@@ -64,8 +66,9 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print(data.batteryVoltage, 2);
     display.display().setCursor(0, line++ * Config::LINE_SPACING);
     display.display().print("Wind:");
-    display.display().print(data.windSpeed, 1);
-    display.display().print("m/s State:");
+    display.display().print(units::metersPerSecondForDisplay(data.windSpeed, data.unitsImperial), 1);
+    display.display().print(units::metersPerSecondUnitLabel(data.unitsImperial));
+    display.display().print(" State:");
     display.display().print(static_cast<int>(data.flightState));
 
     //todo: allow Alt Trace sampling to be adjusted and ring buffer size to be changed in settings
@@ -108,6 +111,11 @@ void SettingsScreen::draw(DisplayManager& display, const FlightData& data) {
     display.display().print((editing && selected == DisplayManager::SettingsFieldBackgroundWhite) ? ">" : " ");
     display.display().print("Invert:");
     display.display().print(data.backgroundWhite ? "On" : "Off");
+
+    display.display().setCursor(0, line++ * Config::LINE_SPACING);
+    display.display().print((editing && selected == DisplayManager::SettingsFieldUnits) ? ">" : " ");
+    display.display().print("Units:");
+    display.display().print(data.unitsImperial ? "Imperial" : "Metric");
 }
 
 void SettingsScreen::exit() {}

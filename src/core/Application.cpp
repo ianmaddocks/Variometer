@@ -212,6 +212,7 @@ void Application::applySettings() {
     flightData_.replaySpeed = settings_.replaySpeed;
     flightData_.minSatellites = settings_.minSatellites;
     flightData_.backgroundWhite = settings_.backgroundWhite;
+    flightData_.unitsImperial = settings_.unitsImperial;
 }
 
 void Application::loop() {

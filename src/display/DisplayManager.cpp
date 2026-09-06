@@ -367,6 +367,11 @@ void DisplayManager::handleEncoderDelta(int8_t delta) {
                         settings_->backgroundWhite = !settings_->backgroundWhite;
                     }
                     break;
+                case SettingsFieldUnits:
+                    if (delta != 0) {
+                        settings_->unitsImperial = !settings_->unitsImperial;
+                    }
+                    break;
                 default:
                     break;
             }

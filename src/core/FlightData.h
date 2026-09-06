@@ -22,6 +22,12 @@ struct DeviceSettings {
     uint16_t altitudeTraceMinutes = 30;
     uint8_t initialFlightScreen = 0;
 
+    // Display-only unit system for speed/vertical-speed/altitude readouts
+    // (on-device Settings screen and the web UI). Data logging (flight-log
+    // CSV, BLE telemetry) always stays metric regardless of this -- see
+    // utils/Units.h.
+    bool unitsImperial = false;
+
     // Playback rate for the post-flight 3D replay, as a multiple of real
     // time. 3x replays a typical flight in a reviewable length of time.
     uint8_t replaySpeed = 4;
@@ -84,6 +90,7 @@ struct FlightData {
     uint8_t replaySpeed = 4;
     uint8_t minSatellites = Config::MIN_SATELLITES_DEFAULT;
     bool backgroundWhite = false;
+    bool unitsImperial = false;
 };
 
 }  // namespace variometer

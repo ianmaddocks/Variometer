@@ -212,6 +212,7 @@ void BleTelemetry::update(const FlightData& data, const GPS::DateTime& utc,
 
     if (now - lastVarioSentMs_ >= Config::BLE_VARIO_SENTENCE_INTERVAL_MS) {
         sendVarioSentence(data, baroValid, pressurePa, temperatureC);
+        sendLxwp0Sentence(data, baroValid);
         lastVarioSentMs_ = now;
     }
 }
@@ -301,6 +302,43 @@ void BleTelemetry::sendVarioSentence(const FlightData& data, bool baroValid,
         "$LK8EX1,%d,%.1f,%d,%d,%d",
         pressureField, static_cast<double>(data.barometricAltitude),
         varioField, temperatureField, batteryField));
+    len = appendChecksumAndTerminate(buf, len, sizeof(buf));
+    sendBytes(buf, len);
+}
+
+void BleTelemetry::sendLxwp0Sentence(const FlightData& data, bool baroValid) {
+    /*
+     * $LXWP0,loggerActive,IAS,baroAlt,vario,vario30s,,,,,course,,
+     *
+     * Field semantics follow XCSoar's XCTracer driver (Parser.cpp): field
+     * 0 is Y/N for "logger running", fields 2/3 are barometric altitude
+     * (m) and instantaneous vario (m/s), field 9 is course in degrees.
+     * IAS (field 1) and the remaining fields have no equivalent sensor on
+     * this device, so they are left empty rather than populated with a
+     * misleading zero -- an empty NMEA field reads as "not provided" to
+     * a conforming parser, whereas "0" would look like a real reading.
+     *
+     * Not a confirmed Wingman specification: Wingman's own help page only
+     * names "XCTracer devices (LXWP0 or LXWPW...)" as supported, without
+     * documenting whether it matches on this sentence, on the NUS service
+     * UUID (already used below), or on advertised device name. Sent
+     * alongside the existing LK8EX1 sentence on a best-effort basis --
+     * verify against an actual paired Wingman session, and revisit this
+     * if the device still isn't recognised as a vario.
+     */
+    if (!baroValid) {
+        return;
+    }
+
+    char buf[64];
+    size_t len = static_cast<size_t>(snprintf(
+        buf, sizeof(buf),
+        "$LXWP0,%c,,%.1f,%.2f,%.2f,,,,,%.0f,,",
+        data.recordingActive ? 'Y' : 'N',
+        static_cast<double>(data.barometricAltitude),
+        static_cast<double>(data.verticalSpeed),
+        static_cast<double>(data.verticalSpeedAverage30s),
+        static_cast<double>(data.track)));
     len = appendChecksumAndTerminate(buf, len, sizeof(buf));
     sendBytes(buf, len);
 }

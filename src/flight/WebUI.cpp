@@ -249,7 +249,8 @@ void WebUI::handleStatusJson() {
     json += "\"speedKmh\":"; json += String(data.groundSpeed * 3.6f, 1); json += ",";
     json += "\"track\":"; json += String(data.track, 1); json += ",";
     json += "\"batteryPercent\":"; json += String(data.batteryPercent, 0); json += ",";
-    json += "\"batteryVoltage\":"; json += String(data.batteryVoltage, 2);
+    json += "\"batteryVoltage\":"; json += String(data.batteryVoltage, 2); json += ",";
+    json += "\"unitsImperial\":"; json += (data.unitsImperial ? "true" : "false");
     json += "}";
     webServer.send(200, "application/json", json);
 }
@@ -386,6 +387,10 @@ void WebUI::handleSettingsPage() {
                 "<input type=\"checkbox\" name=\"invert\"";
         html += settings_->backgroundWhite ? " checked" : "";
         html += "></div>"
+                "<div class=\"toggle-row\"><span>Imperial units (mph/ft/ft/s)</span>"
+                "<input type=\"checkbox\" name=\"units\"";
+        html += settings_->unitsImperial ? " checked" : "";
+        html += "></div>"
                 "<div style=\"margin-top:16px;\"><input type=\"submit\" value=\"Save Settings\"></div>"
                 "</form>";
     }
@@ -422,6 +427,7 @@ void WebUI::handleSettingsSave() {
     settings_->minSatellites = static_cast<uint8_t>(minSat);
 
     settings_->backgroundWhite = webServer.hasArg("invert");
+    settings_->unitsImperial = webServer.hasArg("units");
 
     settingsChanged_ = true;
 
