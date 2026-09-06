@@ -29,8 +29,9 @@ struct LogSample {
 
 /*
  * Owns the WiFi AP and the device's whole web UI: the Vario/Flights/Settings
- * tabs, live status feed, flight-log CSV storage/download/delete, and the
- * OTA firmware upload. Kept as one class -- rather than splitting the web
+ * tabs, live status feed, and flight-log CSV storage/download/delete.
+ * (OTA firmware upload used to live here too; disabled -- see WebUI.cpp.)
+ * Kept as one class -- rather than splitting the web
  * server out on its own -- because it already owned the WebServer instance
  * for flight-log download before the other pages existed, and every page
  * here shares that one server and the same WiFi AP lifecycle.
@@ -75,7 +76,8 @@ private:
     void handleDeleteLog();
     void handleSettingsPage();
     void handleSettingsSave();
-    void handleFirmwareUpload();
+    // OTA firmware upload disabled -- see WebUI.cpp for why.
+    // void handleFirmwareUpload();
     bool isSafeFileName(const String& name) const;
     String makeStartName(const GPS::DateTime& startTime) const;
 

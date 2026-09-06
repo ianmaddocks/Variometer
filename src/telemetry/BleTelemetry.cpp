@@ -149,6 +149,30 @@ void BleTelemetry::begin() {
 
     service->start();
 
+    /*
+     * Standard Device Information Service, exposed alongside the NUS
+     * service above. Static, read-only values -- set once here and never
+     * updated -- so any generic BLE inspector (or FlyGaggle itself) can
+     * show who made this device and which firmware/hardware revision it
+     * is, the same way it would for any commercial BLE accessory.
+     */
+    NimBLEService* deviceInfoService =
+        server_->createService(Config::BLE_DEVICE_INFO_SERVICE_UUID);
+
+    NimBLECharacteristic* manufacturerCharacteristic =
+        deviceInfoService->createCharacteristic(
+            Config::BLE_MANUFACTURER_NAME_CHARACTERISTIC_UUID,
+            NIMBLE_PROPERTY::READ);
+    manufacturerCharacteristic->setValue(Config::BLE_MANUFACTURER_NAME);
+
+    NimBLECharacteristic* modelNumberCharacteristic =
+        deviceInfoService->createCharacteristic(
+            Config::BLE_MODEL_NUMBER_CHARACTERISTIC_UUID,
+            NIMBLE_PROPERTY::READ);
+    modelNumberCharacteristic->setValue(Config::BLE_MODEL_NUMBER);
+
+    deviceInfoService->start();
+
     NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
     advertising->addServiceUUID(Config::BLE_NUS_SERVICE_UUID);
     advertising->start();

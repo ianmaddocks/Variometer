@@ -357,4 +357,16 @@ constexpr uint32_t BLE_VARIO_SENTENCE_INTERVAL_MS = 200;
 constexpr char BLE_NUS_SERVICE_UUID[] = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 constexpr char BLE_NUS_TX_CHARACTERISTIC_UUID[] = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 constexpr char BLE_NUS_RX_CHARACTERISTIC_UUID[] = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
+
+/*
+ * Standard BLE Device Information Service (0x180A), read-only static
+ * strings. These UUIDs are the Bluetooth SIG-assigned 16-bit values, not
+ * project-specific -- any generic BLE inspector app (nRF Connect etc.)
+ * recognises this service and displays these fields by name.
+ */
+constexpr char BLE_DEVICE_INFO_SERVICE_UUID[] = "180A";
+constexpr char BLE_MANUFACTURER_NAME_CHARACTERISTIC_UUID[] = "2A29";
+constexpr char BLE_MODEL_NUMBER_CHARACTERISTIC_UUID[] = "2A24";
+constexpr char BLE_MANUFACTURER_NAME[] = "Ian";
+constexpr char BLE_MODEL_NUMBER[] = "0.0.1";
 }  // namespace Config

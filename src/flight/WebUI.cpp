@@ -1,7 +1,7 @@
 #include "flight/WebUI.h"
 
 #include <LittleFS.h>
-#include <Update.h>
+// #include <Update.h>  // OTA disabled -- see partitions.csv comment for why.
 #include <WebServer.h>
 #include <WiFi.h>
 
@@ -85,15 +85,22 @@ void WebUI::begin() {
 
     webServer.on("/settings", HTTP_GET, [this]() { handleSettingsPage(); });
     webServer.on("/settings/save", HTTP_POST, [this]() { handleSettingsSave(); });
-    webServer.on("/update", HTTP_POST,
-                 [this]() {
-                     webServer.send(200, "text/plain", Update.hasError() ? "Firmware update failed" : "Update complete; rebooting");
-                     if (!Update.hasError()) {
-                         delay(100);
-                         ESP.restart();
-                     }
-                 },
-                 [this]() { handleFirmwareUpload(); });
+    /*
+     * OTA firmware upload disabled: this project uses partitions.csv's
+     * single-app-partition layout now, which does not reserve a second
+     * OTA slot for Update.begin()/end() to flash into. Re-enabling this
+     * route requires reverting partitions.csv to a two-slot ota_0/ota_1
+     * scheme first, which halves the usable app flash again.
+     */
+    // webServer.on("/update", HTTP_POST,
+    //              [this]() {
+    //                  webServer.send(200, "text/plain", Update.hasError() ? "Firmware update failed" : "Update complete; rebooting");
+    //                  if (!Update.hasError()) {
+    //                      delay(100);
+    //                      ESP.restart();
+    //                  }
+    //              },
+    //              [this]() { handleFirmwareUpload(); });
     webServer.onNotFound([]() {
         webServer.sendHeader("Location", "/");
         webServer.send(302, "text/plain", "");
@@ -383,11 +390,13 @@ void WebUI::handleSettingsPage() {
                 "</form>";
     }
 
-    html += "<div class=\"card\"><label style=\"margin-top:0;\">Firmware Update</label>"
-            "<form method=\"POST\" action=\"/update\" enctype=\"multipart/form-data\">"
-            "<input type=\"file\" name=\"firmware\" accept=\".bin\" required>"
-            "<div style=\"margin-top:12px;\"><input type=\"submit\" value=\"Upload &amp; Flash\"></div>"
-            "</form><div class=\"hint\">Uploads a compiled .bin and reboots the device once flashed.</div></div>";
+    // Firmware Update card removed along with the /update route -- see
+    // the comment above that route's registration for why.
+    // html += "<div class=\"card\"><label style=\"margin-top:0;\">Firmware Update</label>"
+    //         "<form method=\"POST\" action=\"/update\" enctype=\"multipart/form-data\">"
+    //         "<input type=\"file\" name=\"firmware\" accept=\".bin\" required>"
+    //         "<div style=\"margin-top:12px;\"><input type=\"submit\" value=\"Upload &amp; Flash\"></div>"
+    //         "</form><div class=\"hint\">Uploads a compiled .bin and reboots the device once flashed.</div></div>";
 
     html += "</div><nav class=\"tabs\"><a href=\"/\">Vario</a><a href=\"/flights\">Flights</a><a href=\"/settings\" class=\"active\">Settings</a></nav>"
             "</body></html>";
@@ -420,6 +429,7 @@ void WebUI::handleSettingsSave() {
     webServer.send(303);
 }
 
+/*
 void WebUI::handleFirmwareUpload() {
     HTTPUpload& upload = webServer.upload();
     if (upload.status == UPLOAD_FILE_START) {
@@ -440,5 +450,6 @@ void WebUI::handleFirmwareUpload() {
         }
     }
 }
+*/
 
 }  // namespace variometer

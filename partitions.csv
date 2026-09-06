@@ -1,6 +1,12 @@
 # Name,   Type, SubType, Offset,  Size,    Flags
+#
+# OTA disabled: app0/app1 + otadata used to reserve two ~1.25MB app slots
+# so Update.begin()/end() (see WebUI.cpp) could flash into the inactive
+# one and swap on reboot. With OTA removed, that split serves no purpose
+# and only halves the flash actually available to one firmware image.
+# Reclaimed as a single "factory" app partition sized app0+app1+otadata
+# combined -- firmware must now be flashed over USB (pio run -t upload),
+# not via the removed /update web route.
 nvs,      data, nvs,     0x9000,  0x5000,
-otadata,  data, ota,     0xE000,  0x2000,
-app0,     app,  ota_0,   0x10000, 0x140000,
-app1,     app,  ota_1,   0x150000,0x140000,
-flights,  data, spiffs,  0x290000,0x170000,
+app0,     app,  factory, 0x10000, 0x282000,
+flights,  data, spiffs,  0x292000,0x16E000,
