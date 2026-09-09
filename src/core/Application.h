@@ -2,7 +2,7 @@
 
 #include "core/FlightData.h"
 #include "sensors/GPS.h"
-#include "sensors/BiometricSensor.h"
+#include "sensors/Dps310Sensor.h"
 #include "input/Encoder.h"
 #include "input/PushButton.h"
 #include "power/BatteryMonitor.h"
@@ -19,6 +19,15 @@
 #include "telemetry/BleTelemetry.h"
 
 namespace variometer {
+
+// Dps310Sensor and BatteryMonitor live in VarioCommonLib (shared with
+// VarioLite, whose copies were logic-identical) under namespace
+// varcommon. BiometricSensor is kept as a local alias, not a rename to
+// Dps310Sensor throughout, so every existing call site below and in
+// Application.cpp (biometricSensor_, BiometricSensor::Counters, etc.)
+// stays untouched.
+using BiometricSensor = varcommon::Dps310Sensor;
+using varcommon::BatteryMonitor;
 
 class Application {
 public:

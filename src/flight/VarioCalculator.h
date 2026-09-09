@@ -8,6 +8,10 @@
 
 namespace variometer {
 
+// RingBuffer lives in VarioCommonLib (shared with VarioLite) under
+// namespace varcommon.
+using varcommon::RingBuffer;
+
 class VarioCalculator {
 public:
     VarioCalculator() = default;

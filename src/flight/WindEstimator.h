@@ -7,6 +7,10 @@
 
 namespace variometer {
 
+// RingBuffer lives in VarioCommonLib (shared with VarioLite) under
+// namespace varcommon.
+using varcommon::RingBuffer;
+
 /*
  * Wind speed/direction derived from the drift in ground speed while
  * circling -- the standard "poor man's" wind estimate used by most

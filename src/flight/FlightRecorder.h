@@ -8,6 +8,10 @@
 
 namespace variometer {
 
+// RingBuffer lives in VarioCommonLib (shared with VarioLite) under
+// namespace varcommon.
+using varcommon::RingBuffer;
+
 struct TracePoint {
     float altitude = 0.0f;
     float timeSeconds = 0.0f;
